@@ -1,0 +1,130 @@
+{
+  "backend": "rocksdb",
+  "db_path": "/data4/sui-hotstore-route1-mainnet-270700000-270709999-rocksdb/db-a",
+  "workload": "get-object-version",
+  "dataset": null,
+  "requests_per_run": 500000,
+  "batch_size": 10,
+  "runs": [
+    {
+      "concurrency": 1,
+      "requests": 500000,
+      "elapsed_ms": 939.0144310000001,
+      "throughput_rps": 532473.179850417,
+      "hits": 500000,
+      "misses": 0,
+      "errors": 0,
+      "records_returned_total": 500000,
+      "avg_records_per_request": 1.0,
+      "records_per_second": 532473.179850417,
+      "latency_ms": {
+        "p50": 0.0,
+        "p90": 0.001,
+        "p95": 0.001,
+        "p99": 0.002,
+        "p999": 0.019,
+        "max": 0.5
+      }
+    },
+    {
+      "concurrency": 4,
+      "requests": 500000,
+      "elapsed_ms": 2223.325405,
+      "throughput_rps": 224888.35816635666,
+      "hits": 500000,
+      "misses": 0,
+      "errors": 0,
+      "records_returned_total": 500000,
+      "avg_records_per_request": 1.0,
+      "records_per_second": 224888.35816635666,
+      "latency_ms": {
+        "p50": 0.0,
+        "p90": 0.001,
+        "p95": 0.001,
+        "p99": 0.001,
+        "p999": 0.019,
+        "max": 0.143
+      }
+    },
+    {
+      "concurrency": 8,
+      "requests": 500000,
+      "elapsed_ms": 4171.3618160000005,
+      "throughput_rps": 119864.9318987773,
+      "hits": 500000,
+      "misses": 0,
+      "errors": 0,
+      "records_returned_total": 500000,
+      "avg_records_per_request": 1.0,
+      "records_per_second": 119864.9318987773,
+      "latency_ms": {
+        "p50": 0.0,
+        "p90": 0.001,
+        "p95": 0.001,
+        "p99": 0.001,
+        "p999": 0.019,
+        "max": 0.229
+      }
+    },
+    {
+      "concurrency": 16,
+      "requests": 500000,
+      "elapsed_ms": 11846.287181,
+      "throughput_rps": 42207.31714168968,
+      "hits": 500000,
+      "misses": 0,
+      "errors": 0,
+      "records_returned_total": 500000,
+      "avg_records_per_request": 1.0,
+      "records_per_second": 42207.31714168968,
+      "latency_ms": {
+        "p50": 0.001,
+        "p90": 0.001,
+        "p95": 0.001,
+        "p99": 0.002,
+        "p999": 0.02,
+        "max": 0.141
+      }
+    },
+    {
+      "concurrency": 32,
+      "requests": 500000,
+      "elapsed_ms": 24909.127224,
+      "throughput_rps": 20072.96343640049,
+      "hits": 500000,
+      "misses": 0,
+      "errors": 0,
+      "records_returned_total": 500000,
+      "avg_records_per_request": 1.0,
+      "records_per_second": 20072.96343640049,
+      "latency_ms": {
+        "p50": 0.001,
+        "p90": 0.001,
+        "p95": 0.001,
+        "p99": 0.002,
+        "p999": 0.021,
+        "max": 0.19
+      }
+    },
+    {
+      "concurrency": 64,
+      "requests": 500000,
+      "elapsed_ms": 50563.594302,
+      "throughput_rps": 9888.53753183885,
+      "hits": 500000,
+      "misses": 0,
+      "errors": 0,
+      "records_returned_total": 500000,
+      "avg_records_per_request": 1.0,
+      "records_per_second": 9888.53753183885,
+      "latency_ms": {
+        "p50": 0.001,
+        "p90": 0.001,
+        "p95": 0.001,
+        "p99": 0.002,
+        "p999": 0.022,
+        "max": 0.155
+      }
+    }
+  ]
+}

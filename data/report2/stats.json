@@ -1,0 +1,53 @@
+{
+  "backend": "toplingdb",
+  "db_path": "/data4/sui-hotstore-route1-mainnet-270700000-270709999-toplingdb/db-a",
+  "disk_usage_bytes": 4000004537,
+  "column_families": {
+    "cf_checkpoint": {
+      "entries": 60000,
+      "key_bytes": 480000,
+      "value_bytes": 8940000
+    },
+    "cf_event_by_type": {
+      "entries": 811079,
+      "key_bytes": 25954528,
+      "value_bytes": 676353429
+    },
+    "cf_meta": {
+      "entries": 9,
+      "key_bytes": 130,
+      "value_bytes": 292
+    },
+    "cf_object_last_seen": {
+      "entries": 79125,
+      "key_bytes": 5222250,
+      "value_bytes": 21862542
+    },
+    "cf_object_version": {
+      "entries": 2380717,
+      "key_bytes": 176173058,
+      "value_bytes": 762760547
+    },
+    "cf_owner_touched_objects": {
+      "entries": 2380717,
+      "key_bytes": 382664254,
+      "value_bytes": 757999113
+    },
+    "cf_tx_by_digest": {
+      "entries": 530490,
+      "key_bytes": 23312258,
+      "value_bytes": 91214978
+    },
+    "default": {
+      "entries": 0,
+      "key_bytes": 0,
+      "value_bytes": 0
+    }
+  },
+  "totals": {
+    "column_family_count": 8,
+    "entries": 6242137,
+    "key_bytes": 613806478,
+    "value_bytes": 2319130901
+  }
+}

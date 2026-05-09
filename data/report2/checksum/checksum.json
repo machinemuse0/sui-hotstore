@@ -1,0 +1,62 @@
+{
+  "backend": "toplingdb",
+  "db_path": "/data4/sui-hotstore-route1-mainnet-270700000-270709999-toplingdb/db-a",
+  "disk_usage_bytes": 4000004537,
+  "column_families": {
+    "cf_checkpoint": {
+      "entries": 60000,
+      "key_bytes": 480000,
+      "value_bytes": 8940000,
+      "sha256": "009f58b8ce0588d9d6b64d182108d16a7501d1be9cfc9c2304efa9cd0aaccffb"
+    },
+    "cf_event_by_type": {
+      "entries": 811079,
+      "key_bytes": 25954528,
+      "value_bytes": 676353429,
+      "sha256": "74a441bab7e084dd170e4d11ff6990649300c7d8ba4971058a7664f8eda865fe"
+    },
+    "cf_meta": {
+      "entries": 9,
+      "key_bytes": 130,
+      "value_bytes": 292,
+      "sha256": "15fef1b6273dc126ed0c60bb626742b7ff7458067b9ce1a005fdfbefe3b0c676"
+    },
+    "cf_object_last_seen": {
+      "entries": 79125,
+      "key_bytes": 5222250,
+      "value_bytes": 21862542,
+      "sha256": "7338db1114fbdc11538324470eae539acc484fd5555f08a0ef3a5ee1acf8e411"
+    },
+    "cf_object_version": {
+      "entries": 2380717,
+      "key_bytes": 176173058,
+      "value_bytes": 762760547,
+      "sha256": "6aedfcae29f5d203da05e63485201361b3077dc221e7a61e5ff42cb6f9a46c28"
+    },
+    "cf_owner_touched_objects": {
+      "entries": 2380717,
+      "key_bytes": 382664254,
+      "value_bytes": 757999113,
+      "sha256": "026d6073fe61ce57d657b6780a48fad3c3dd306c01cd6a302860ea949a77319c"
+    },
+    "cf_tx_by_digest": {
+      "entries": 530490,
+      "key_bytes": 23312258,
+      "value_bytes": 91214978,
+      "sha256": "0d56c5e8e6fce6ef55c527351d0e4b5e5b96e7e3ed1e48b4b0d6f200bf2af04d"
+    },
+    "default": {
+      "entries": 0,
+      "key_bytes": 0,
+      "value_bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  },
+  "totals": {
+    "column_family_count": 8,
+    "entries": 6242137,
+    "key_bytes": 613806478,
+    "value_bytes": 2319130901,
+    "sha256": "786e797963a7e3640e894cd68572438da3e63a792f3fd061ba40aa70e2c13a10"
+  }
+}

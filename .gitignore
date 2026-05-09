@@ -1,0 +1,40 @@
+# macOS and editor noise
+.DS_Store
+.idea/
+.vscode/
+
+# Rust build outputs
+/target/
+**/*.rs.bk
+
+# Local runtime data and reports
+/data/
+/reports/*
+!/reports/summary.md
+/fixtures/
+
+# Benchmark, smoke-test, and ad hoc outputs
+*.log
+*.out
+*.tmp
+*.bak
+
+# Embedded databases and local artifacts
+*.db
+*.sst
+*.ldb
+MANIFEST-*
+CURRENT
+IDENTITY
+LOCK
+LOG
+LOG.old*
+OPTIONS-*
+
+# Environment files
+.env
+.env.*
+
+# OS and test leftovers
+tmp/
+.tmp/
