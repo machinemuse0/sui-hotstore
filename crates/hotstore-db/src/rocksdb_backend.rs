@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use hotstore_core::ColumnFamily;
-use rocksdb::{Direction, IteratorMode, Options, WriteBatch, DB};
+use rocksdb::{Direction, IteratorMode, Options, ReadOptions, WriteBatch, DB};
 
 use crate::traits::{HotWriteBatch, ScanOutcome, StorageEngine};
 
@@ -46,8 +46,13 @@ impl StorageEngine for RocksDbBackend {
 
     fn multi_get(&self, cf: ColumnFamily, keys: &[&[u8]]) -> Result<Vec<Option<Vec<u8>>>> {
         let handle = self.cf_handle(cf)?;
+        // ToplingDB zero-copy: pin the SuperVersion for the duration of this
+        // batched_multi_get so the returned PinnableSlices reference mmap'd SST
+        // pages directly. The guard calls finish_pin() on drop.
+        let mut readopts = ReadOptions::default();
+        let _pin = readopts.scope_pin();
         self.db
-            .batched_multi_get_cf(&handle, keys.iter().copied(), false)
+            .batched_multi_get_cf_opt(&handle, keys.iter(), false, &readopts)
             .into_iter()
             .map(|result| {
                 result
