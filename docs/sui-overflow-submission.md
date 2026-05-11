@@ -755,20 +755,20 @@ This route is also our current evidence path for a practical reason: we already 
 roughly `200G` of Sui data through the formal snapshot workflow, but bringing a local
 `sui-node` on top of that dataset to a stable benchmark-ready state still involves a long
 pruning / compaction window. Because of that, the current benchmark results are based on
-bounded-range live-RPC ingestion, with the current public run focused on about `10,000`
-checkpoints. Larger dataset runs are still in progress.
+bounded-range live-RPC ingestion, with the current public run covering checkpoints
+`270700000..270759999` (`60,000` checkpoints). Larger dataset runs are still in progress.
 
 ```bash
 bash scripts/run-route1-benchmark-server.sh \
   --network mainnet \
   --first-checkpoint 270700000 \
-  --last-checkpoint 270709999 \
-  --base-dir /data4/sui-hotstore-route1-mainnet-270700000-270709999-rocksdb \
+  --last-checkpoint 270759999 \
+  --base-dir /data4/sui-hotstore-route1-mainnet-270700000-270759999-rocksdb \
   --backend rocksdb \
   --cargo-profile release \
-  --requests 100000 \
+  --requests 500000 \
   --concurrency 1,4,8,16,32,64 \
-  --batch-size 50 \
+  --batch-size 10 \
   --tx-batch-size 50 \
   --rpc-max-retries 8 \
   --rpc-retry-backoff-ms 1500 \
@@ -945,15 +945,16 @@ checksum consistency
 Current result summary:
 
 ```text
-- mainnet checkpoint range: 270700000..270709999
-- imported checkpoints: 10,000
-- logical entries: 1,082,702
+- mainnet checkpoint range: 270700000..270759999
+- imported checkpoints: 60,000
+- logical entries: 6,242,137
 - checksum: all benchmark-facing data column families match; only cf_meta differs by 2 value bytes
-- get-tx: ToplingDB leads by about 8.9 percent
-- multi-get-tx: ToplingDB leads by about 1.2 percent
-- multi-get-object-version: ToplingDB leads by about 2.5 percent
-- mixed-rpc: RocksDB leads by about 7.0 percent
-- scan-events: effectively tied
+- get-tx: ToplingDB leads by about 231 percent at the best-throughput point
+- multi-get-tx: ToplingDB leads by about 14.5x
+- multi-get-object-version: ToplingDB leads by about 15.2x
+- mixed-rpc: ToplingDB leads by about 8.2x
+- scan-events: ToplingDB leads by about 7.8 percent
+- disk usage: ToplingDB uses about 78.6 percent less space in this report bundle
 ```
 
 If only one backend's fresh evidence is visible in the recording window, say explicitly which side is already captured and note that ToplingDB submission evidence is collected on Linux.

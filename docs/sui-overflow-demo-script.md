@@ -143,7 +143,7 @@ The benchmark suite is where the current implementation is strongest today. We v
 Optional honesty line for the current recording:
 
 ```text
-We also restored about 200G through the formal snapshot path, but local sui-node pruning and compaction on top of that dataset still takes long enough that today's benchmark evidence is based on a bounded live-RPC run over roughly 10,000 checkpoints. Larger-scale runs are still in progress.
+We also restored about 200G through the formal snapshot path, but local sui-node pruning and compaction on top of that dataset still takes long enough that today's benchmark evidence uses a bounded live-RPC route 1 run over checkpoints 270700000 through 270759999.
 ```
 
 Show:
@@ -167,15 +167,16 @@ Highlight:
 Current result summary:
 
 ```text
-- mainnet checkpoint range: 270700000..270709999
-- imported checkpoints: 10,000
-- logical entries: 1,082,702
+- mainnet checkpoint range: 270700000..270759999
+- imported checkpoints: 60,000
+- logical entries: 6,242,137
 - checksum: all benchmark-facing data column families match; only cf_meta differs by 2 value bytes
-- get-tx: ToplingDB leads by about 8.9 percent
-- multi-get-tx: ToplingDB leads by about 1.2 percent
-- multi-get-object-version: ToplingDB leads by about 2.5 percent
-- mixed-rpc: RocksDB leads by about 7.0 percent
-- scan-events: effectively tied
+- get-tx: ToplingDB leads by about 231 percent at the best-throughput point
+- multi-get-tx: ToplingDB leads by about 13.5x
+- multi-get-object-version: ToplingDB leads by about 15.2x
+- mixed-rpc: ToplingDB leads by about 8.2x
+- scan-events: ToplingDB leads by about 7.8 percent
+- disk usage: ToplingDB uses about 78.6 percent less space in this report bundle
 ```
 
 If both backends are ready, say:

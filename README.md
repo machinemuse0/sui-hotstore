@@ -50,13 +50,14 @@ This is the current end-to-end path for bounded real-data benchmarking:
 ```bash
 bash scripts/run-route1-benchmark-server.sh \
   --network mainnet \
-  --latest-count 10000 \
-  --base-dir /data4/sui-hotstore-route1-mainnet-latest-10000 \
+  --first-checkpoint 270700000 \
+  --last-checkpoint 270759999 \
+  --base-dir /data4/sui-hotstore-route1-mainnet-270700000-270759999-rocksdb \
   --backend rocksdb \
   --cargo-profile release \
-  --requests 100000 \
+  --requests 500000 \
   --concurrency 1,4,8,16,32,64 \
-  --batch-size 50 \
+  --batch-size 10 \
   --tx-batch-size 50
 ```
 
@@ -65,8 +66,9 @@ To restart from scratch instead of resuming:
 ```bash
 bash scripts/run-route1-benchmark-server.sh \
   --network mainnet \
-  --latest-count 10000 \
-  --base-dir /data4/sui-hotstore-route1-mainnet-latest-10000 \
+  --first-checkpoint 270700000 \
+  --last-checkpoint 270759999 \
+  --base-dir /data4/sui-hotstore-route1-mainnet-270700000-270759999-rocksdb \
   --backend rocksdb \
   --cargo-profile release \
   --reset-state
@@ -78,8 +80,8 @@ For a strict RocksDB vs ToplingDB comparison, prefer pinning an identical explic
 bash scripts/run-route1-benchmark-server.sh \
   --network mainnet \
   --first-checkpoint 270700000 \
-  --last-checkpoint 270709999 \
-  --base-dir /data4/sui-hotstore-route1-mainnet-270700000-270709999-rocksdb \
+  --last-checkpoint 270759999 \
+  --base-dir /data4/sui-hotstore-route1-mainnet-270700000-270759999-rocksdb \
   --backend rocksdb \
   --cargo-profile release
 ```
@@ -89,12 +91,18 @@ bash scripts/run-route1-benchmark-server.sh \
 ```bash
 bash scripts/run-benchmark-suite.sh \
   --backend rocksdb \
-  --db-path /data4/sui-hotstore-route1-mainnet-latest-10000/db-a \
-  --keys-dir /data4/sui-hotstore-route1-mainnet-latest-10000/keys \
-  --report-dir /data4/sui-hotstore-route1-mainnet-latest-10000/reports \
-  --requests 100000 \
+  --db-path /data4/sui-hotstore-route1-mainnet-270700000-270759999-rocksdb/db-a \
+  --keys-dir /data4/sui-hotstore-route1-mainnet-270700000-270759999-rocksdb/keys \
+  --report-dir /data4/sui-hotstore-route1-mainnet-270700000-270759999-rocksdb/reports \
+  --dataset mainnet-270700000-270759999 \
+  --requests 500000 \
+  --warmup-requests 50000 \
   --concurrency 1,4,8,16,32,64 \
-  --batch-size 50 \
+  --access-pattern uniform \
+  --scan-mode count \
+  --cache-state hot \
+  --min-hit-rate 1.0 \
+  --batch-size 10 \
   --cargo-profile release
 ```
 
@@ -104,14 +112,14 @@ bash scripts/run-benchmark-suite.sh \
 cargo run --release --bin hotstore-admin -- \
   stats \
   --backend rocksdb \
-  --db-path /data4/sui-hotstore-route1-mainnet-latest-10000/db-a \
-  --output /data4/sui-hotstore-route1-mainnet-latest-10000/reports/stats.json
+  --db-path /data4/sui-hotstore-route1-mainnet-270700000-270759999-rocksdb/db-a \
+  --output /data4/sui-hotstore-route1-mainnet-270700000-270759999-rocksdb/reports/stats.json
 
 cargo run --release --bin hotstore-admin -- \
   checksum \
   --backend rocksdb \
-  --db-path /data4/sui-hotstore-route1-mainnet-latest-10000/db-a \
-  --output /data4/sui-hotstore-route1-mainnet-latest-10000/reports/checksum/checksum.json
+  --db-path /data4/sui-hotstore-route1-mainnet-270700000-270759999-rocksdb/db-a \
+  --output /data4/sui-hotstore-route1-mainnet-270700000-270759999-rocksdb/reports/checksum/checksum.json
 ```
 
 ## Benchmark Summary
@@ -139,12 +147,31 @@ Current public summary artifact:
 
 - [reports/summary.md](reports/summary.md)
 
+Current headline comparison:
+
+- RocksDB results are based on the `master` branch.
+- ToplingDB results are based on the `topling` branch.
+
+| Metric | RocksDB | ToplingDB | ToplingDB vs RocksDB |
+|---|---:|---:|---:|
+| Checkpoint range | `270700000..270759999` | `270700000..270759999` | same data |
+| Imported checkpoints | `60,000` | `60,000` | same data |
+| Logical entries | `6,242,137` | `6,242,137` | same data |
+| Disk usage | `5.82 GiB` | `1.25 GiB` | `78.6%` less |
+| get-tx | `1.36M rps` | `4.51M rps` | `3.31x` |
+| get-object-version | `0.81M rps` | `3.66M rps` | `4.52x` |
+| get-object-last-seen | `2.01M rps` | `4.85M rps` | `2.42x` |
+| multi-get-tx | `0.15M rps` | `2.15M rps` | `14.53x` |
+| multi-get-object-version | `0.08M rps` | `1.22M rps` | `15.24x` |
+| scan-events | `1.47M rps` | `1.58M rps` | `1.08x` |
+| mixed-rpc | `0.33M rps` | `2.72M rps` | `8.24x` |
+
 Current benchmark-data note:
 
 - We restored about `200G` of Sui data via the formal snapshot path.
 - In practice, bringing a local `sui-node` on top of that dataset to a stable benchmark-ready state currently involves a long pruning / compaction window.
-- Because of that, the current public benchmark evidence is based on a bounded route 1 workflow that pulls roughly the latest `10,000` checkpoints from live RPC into HotStore.
-- Larger dataset runs are still in progress and will be added as the benchmark corpus expands.
+- Because of that, the current public benchmark evidence is based on a bounded route 1 workflow over checkpoints `270700000..270759999`.
+- The current comparison covers `60,000` checkpoints, `6,242,137` logical entries, and DB-level workloads with matching benchmark-facing data column-family checksums.
 
 Related benchmark materials:
 
@@ -223,8 +250,8 @@ The current MVP is centered on:
 
 Near-term:
 
-- finish reproducible RocksDB vs ToplingDB server benchmarks
-- fill benchmark summary with current server-side results
+- add API-level benchmark coverage on top of the DB-level evidence
+- capture repeat runs for variance and cold-cache behavior
 - package Sui Overflow demo materials
 
 Later:

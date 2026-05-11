@@ -101,7 +101,7 @@ The current MVP focuses on bounded checkpoint-range semantics. It includes a Rus
 ```
 
 ```text
-For benchmark evidence, we have already restored roughly 200G of Sui data via the formal snapshot path, but local sui-node pruning / compaction time on top of that dataset is still too long for it to be the main demo route today. As a result, the current public benchmark run uses a bounded live-RPC route over about 10,000 checkpoints, while larger dataset runs are still in progress.
+For benchmark evidence, we have already restored roughly 200G of Sui data via the formal snapshot path, but local sui-node pruning / compaction time on top of that dataset is still too long for it to be the main demo route today. As a result, the current public benchmark run uses a bounded live-RPC route over checkpoints 270700000..270759999, covering 60,000 checkpoints and 6,242,137 logical entries.
 ```
 
 ---
@@ -121,11 +121,11 @@ The demo shows a bounded-range real Sui dataset being ingested into HotStore, be
 ```
 
 ```text
-The current public benchmark evidence is intentionally bounded. We already have a much larger formal-snapshot dataset on disk, but because local sui-node pruning / compaction still takes a long time on that path, the current demo run is based on roughly 10,000 checkpoints sourced from live RPC. We will keep extending the benchmark corpus with larger datasets.
+The current public benchmark evidence is intentionally bounded. We already have a much larger formal-snapshot dataset on disk, but because local sui-node pruning / compaction still takes a long time on that path, the current demo run uses checkpoints 270700000..270759999 sourced through the route 1 workflow. We will keep extending the benchmark corpus with larger datasets.
 ```
 
 ```text
-In the current mainnet route 1 run over checkpoints 270700000..270709999, both backends ingest the same bounded dataset with 1,082,702 logical entries. All benchmark-facing data column families match by checksum, with the only mismatch appearing in cf_meta, where ToplingDB differs by 2 value bytes. On performance, ToplingDB is ahead on get-tx by about 8.9 percent and shows small wins on the multi-get workloads, while RocksDB is ahead on mixed-rpc by about 7.0 percent and is effectively tied on scan-events.
+In the current mainnet route 1 run over checkpoints 270700000..270759999, both backends ingest the same bounded dataset with 6,242,137 logical entries. All benchmark-facing data column families match by checksum, with the only mismatch appearing in cf_meta, where ToplingDB differs by 2 value bytes. On performance, ToplingDB is ahead across the DB-level workloads in this report, including about 3.3x RocksDB throughput on get-tx, about 14.5x on multi-get-tx, about 15.2x on multi-get-object-version, and about 8.2x on mixed-rpc.
 ```
 
 ---
@@ -175,7 +175,7 @@ ToplingDB practical benchmark runs are currently treated as Linux-only in this p
 ### If the form asks “What did you build?”
 
 ```text
-We built Sui HotStore, a KV-native serving layer and benchmark stack for Sui data applications. It ingests bounded-range Sui data into a Sui-specific schema, keeps a RocksDB baseline, evaluates a ToplingDB backend, validates data equality with checksum tooling, and benchmarks hot-path workloads like tx lookup, object version lookup, multi-get, and event scans. In the current mainnet run over 10,000 checkpoints, ToplingDB leads on get-tx by about 8.9 percent, while RocksDB leads on the mixed-rpc workload by about 7.0 percent.
+We built Sui HotStore, a KV-native serving layer and benchmark stack for Sui data applications. It ingests bounded-range Sui data into a Sui-specific schema, keeps a RocksDB baseline, evaluates a ToplingDB backend, validates data equality with checksum tooling, and benchmarks hot-path workloads like tx lookup, object version lookup, multi-get, and event scans. In the current mainnet run over 60,000 checkpoints, ToplingDB leads across the DB-level workloads and uses about 78.6 percent less disk in the report bundle.
 ```
 
 ### If the form asks “What problem are you solving?”
@@ -201,7 +201,7 @@ Next steps include deeper real Sui ingestion, formal snapshot bootstrap, fuller 
 ## 16. Judge-Friendly 3-Sentence Version
 
 ```text
-Sui HotStore is a KV-native serving layer for Sui data applications. It focuses on bounded-range ingestion, deterministic indexing, checksum validation, resume-aware benchmark workflows, and reproducible benchmarking of RocksDB versus ToplingDB on real Sui-style query workloads. In the current 10,000-checkpoint mainnet run, ToplingDB wins on get-tx and slightly on multi-get, RocksDB wins on mixed-rpc, and both backends are effectively tied on scan-events.
+Sui HotStore is a KV-native serving layer for Sui data applications. It focuses on bounded-range ingestion, deterministic indexing, checksum validation, resume-aware benchmark workflows, and reproducible benchmarking of RocksDB versus ToplingDB on real Sui-style query workloads. In the current 60,000-checkpoint mainnet run, ToplingDB leads across point lookup, multi-get, scan-events, and mixed-rpc DB workloads.
 ```
 
 ---
@@ -221,16 +221,16 @@ Sui HotStore is a KV-native serving layer for Sui data applications. It focuses 
 The current benchmark run already gives us these concrete anchor points:
 
 ```text
-- checkpoint range: 270700000..270709999
-- imported checkpoints: 10,000
-- logical entry count: 1,082,702
-- RocksDB disk usage: 660,614,553 bytes
-- ToplingDB disk usage: 660,614,765 bytes
-- get-tx: ToplingDB about 8.9 percent faster at best-throughput point
-- mixed-rpc: RocksDB about 7.0 percent faster at best-throughput point
-- multi-get-tx: ToplingDB about 1.2 percent faster
-- multi-get-object-version: ToplingDB about 2.5 percent faster
-- scan-events: effectively tied
+- checkpoint range: 270700000..270759999
+- imported checkpoints: 60,000
+- logical entry count: 6,242,137
+- RocksDB disk usage: 6,244,820,049 bytes
+- ToplingDB disk usage: 1,337,044,105 bytes
+- get-tx: ToplingDB about 231 percent faster at best-throughput point
+- mixed-rpc: ToplingDB about 8.2x RocksDB throughput
+- multi-get-tx: ToplingDB about 14.5x RocksDB throughput
+- multi-get-object-version: ToplingDB about 15.2x RocksDB throughput
+- scan-events: ToplingDB about 7.8 percent faster
 - checksum status: all benchmark-facing data CFs match; cf_meta differs by 2 value bytes
 ```
 

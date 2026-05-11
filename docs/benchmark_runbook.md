@@ -189,6 +189,7 @@ export TOPLINGDB_EASY_MIGRATE_CONF=/path/to/sui/crates/typed-store/config/toplin
 
 - 最近 1,000 checkpoints
 - 最近 10,000 checkpoints
+- 固定 60,000 checkpoints，例如当前报告使用的 `270700000..270759999`
 
 注意：
 
@@ -203,7 +204,7 @@ export TOPLINGDB_EASY_MIGRATE_CONF=/path/to/sui/crates/typed-store/config/toplin
 1. 不再重复 ingest
 2. key 生成优先走“路线 1”：
    - 直接用稳定的公网 RPC 拉一段 checkpoint / tx 元数据
-   - 推荐先试最近 `10,000` 个 checkpoint
+   - 冒烟先试最近 `10,000` 个 checkpoint；正式报告建议固定显式区间，例如 `270700000..270759999`
    - 这是当前最稳的公开 benchmark 路线，因为我们虽然已经用 formal snapshot 拉下来了约 `200G` 数据，但本地 `sui-node` 基于这批数据启动后，pruning / compaction 收敛时间仍然偏长
 3. 如果本地 formal/fullnode 节点能稳定提供历史 checkpoint，再考虑“路线 2”：
    - 复用现有 Sui DB
@@ -511,7 +512,7 @@ scripts/gen-bench-keys-from-db.sh \
 - formal snapshot 节点无法稳定返回旧 checkpoint
 - 我们只是需要一批可复用的 benchmark keys
 
-推荐直接抓最近 `10,000` 个 mainnet checkpoints：
+冒烟可以直接抓最近 `10,000` 个 mainnet checkpoints：
 
 ```bash
 HTTPS_PROXY=http://127.0.0.1:7897 \
@@ -532,12 +533,14 @@ bash scripts/gen-bench-keys-from-checkpoints.sh \
 ```bash
 bash scripts/run-route1-benchmark-server.sh \
   --network mainnet \
-  --latest-count 10000 \
-  --base-dir /data4/sui-hotstore-route1-mainnet-latest-10000 \
+  --first-checkpoint 270700000 \
+  --last-checkpoint 270759999 \
+  --base-dir /data4/sui-hotstore-route1-mainnet-270700000-270759999-rocksdb \
+  --backend rocksdb \
   --cargo-profile release \
-  --requests 100000 \
+  --requests 500000 \
   --concurrency 1,4,8,16,32,64 \
-  --batch-size 50
+  --batch-size 10
 ```
 
 #### 路线 2：从现有 Sui formal DB 抽 keys
@@ -597,12 +600,18 @@ bash scripts/gen-bench-keys-from-sui-db.sh \
 ```bash
 scripts/run-benchmark-suite.sh \
   --backend rocksdb \
-  --db-path /data/sui-hotstore-rocksdb \
-  --keys-dir /data/bench-keys-rocksdb \
-  --report-dir /data/reports-rocksdb \
-  --requests 100000 \
+  --db-path /data4/sui-hotstore-route1-mainnet-270700000-270759999-rocksdb/db-a \
+  --keys-dir /data4/sui-hotstore-route1-mainnet-270700000-270759999-rocksdb/keys \
+  --report-dir /data4/sui-hotstore-route1-mainnet-270700000-270759999-rocksdb/reports \
+  --dataset mainnet-270700000-270759999 \
+  --requests 500000 \
+  --warmup-requests 50000 \
   --concurrency 1,4,8,16,32,64 \
-  --batch-size 50 \
+  --access-pattern uniform \
+  --scan-mode count \
+  --cache-state hot \
+  --min-hit-rate 1.0 \
+  --batch-size 10 \
   --cargo-profile release
 ```
 

@@ -13,10 +13,19 @@
 
 ## Dataset
 
-- Source: route 1 bounded-range ingestion from live Sui JSON-RPC
+- Source: route 1 bounded-range ingestion from live Sui checkpoint data
 - Network: mainnet
-- Checkpoint range: `270700000..270709999`
-- Imported checkpoints: `10,000`
+- Checkpoint range: `270700000..270759999`
+- Imported checkpoints: `60,000`
+- Benchmark command shape:
+  - Requests per run: `500,000`
+  - Warmup requests per run: `50,000`
+  - Concurrency sweep: `1,4,8,16,32,64`
+  - Access pattern: `uniform`
+  - Batch / scan limit: `10`
+  - Scan mode: `count`
+  - Cache state: `hot`
+  - Seed: `6840346605343600653`
 - Logical records from the benchmarked DB:
   - `cf_checkpoint`: `60,000`
   - `cf_tx_by_digest`: `530,490`
@@ -26,19 +35,17 @@
   - `cf_owner_touched_objects`: `2,380,717`
   - `cf_meta`: `9`
   - `default`: `0`
-- Important note:
-  - We already restored about `200G` through the formal snapshot path, but local `sui-node` pruning / compaction time on top of that dataset is still too long for it to be the main benchmark evidence path today.
-  - Because of that, the current public benchmark evidence is based on this bounded `10,000` checkpoint route 1 run.
-  - Larger dataset runs are still in progress.
 
 ## Hardware
 
-- CPU: not captured in this report bundle
-- Memory: not captured in this report bundle
-- Disk: not captured in this report bundle
-- OS: Linux server run
-- Test date: not explicitly captured in the report JSON; report directories were updated on `2026-05-07`
-- Cache state: not explicitly captured
+- Hostname: `station`
+- CPU: `Intel(R) Xeon(R) CPU E5-2682 v4 @ 2.50GHz`
+- Memory: `135,056,142,336` bytes
+- OS: Linux `x86_64`
+- Rust: `rustc 1.90.0 (1159e78c4 2025-09-14)`
+- RocksDB report start: `2026-05-11 08:58:34 CST`
+- ToplingDB report start: `2026-05-10 23:08:57 CST`
+- ToplingDB config: `/data7/osc/sui/crates/typed-store/config/topling_sui.yaml`
 
 ## Integrity Summary
 
@@ -52,7 +59,7 @@
   - RocksDB: `2,319,130,899`
   - ToplingDB: `2,319,130,901`
 - Total checksum:
-  - RocksDB: `7adfc56a357db9d03612cfb9b8ae541c1e458abcee17f93f7e02d8f3b5d50e13`
+  - RocksDB: `16e2f4720c874e41630cbb40b3b69439e374d8c8f8ac65ec371380e9e34809d1`
   - ToplingDB: `786e797963a7e3640e894cd68572438da3e63a792f3fd061ba40aa70e2c13a10`
 - Per-column-family checksum result:
   - `cf_checkpoint`: match
@@ -66,73 +73,77 @@
 - `cf_meta` detail:
   - RocksDB `value_bytes`: `290`
   - ToplingDB `value_bytes`: `292`
-  - This `2`-byte difference is enough to make the total DB checksum differ, even though all benchmark-facing data column families match.
+  - The `2`-byte metadata difference changes the total DB checksum, while all benchmark-facing data column families match.
 
 ## DB-Level Results
 
 | Workload | Backend | Best Concurrency | Requests | Throughput RPS | p50 ms | p95 ms | p99 ms | p999 ms | Errors |
 |---|---|---:|---:|---:|---:|---:|---:|---:|---:|
-| get-tx | RocksDB | 1 | 500000 | 1349023.70 | 0.000 | 0.000 | 0.000 | 0.016 | 0 |
-| get-tx | ToplingDB | 1 | 500000 | 1164037.52 | 0.000 | 0.000 | 0.001 | 0.016 | 0 |
-| get-object-version | RocksDB | 1 | 500000 | 532473.18 | 0.000 | 0.001 | 0.002 | 0.019 | 0 |
-| get-object-version | ToplingDB | 1 | 500000 | 564267.68 | 0.000 | 0.001 | 0.001 | 0.018 | 0 |
-| get-object-last-seen | RocksDB | 8 | 500000 | 3629940.65 | 0.001 | 0.002 | 0.002 | 0.021 | 0 |
-| get-object-last-seen | ToplingDB | 8 | 500000 | 3305584.17 | 0.001 | 0.002 | 0.002 | 0.022 | 0 |
-| multi-get-tx | RocksDB | 8 | 500000 | 91808.29 | 0.069 | 0.111 | 0.133 | 0.163 | 0 |
-| multi-get-tx | ToplingDB | 8 | 500000 | 95154.50 | 0.062 | 0.099 | 0.122 | 0.180 | 0 |
-| multi-get-object-version | RocksDB | 8 | 500000 | 65803.36 | 0.089 | 0.140 | 0.165 | 0.208 | 0 |
-| multi-get-object-version | ToplingDB | 8 | 500000 | 75193.18 | 0.076 | 0.134 | 0.162 | 0.197 | 0 |
-| scan-events | RocksDB | 64 | 500000 | 1223579.85 | 0.032 | 0.112 | 0.159 | 0.260 | 0 |
-| scan-events | ToplingDB | 64 | 500000 | 1249729.43 | 0.030 | 0.109 | 0.153 | 0.265 | 0 |
-| mixed-rpc | RocksDB | 4 | 500000 | 170028.23 | 0.000 | 0.072 | 0.090 | 0.131 | 0 |
-| mixed-rpc | ToplingDB | 4 | 500000 | 165324.73 | 0.000 | 0.072 | 0.091 | 0.130 | 0 |
+| get-tx | RocksDB | 64 | 500000 | 1,361,160.74 | 0.032713 | 0.095865 | 0.185756 | 0.542569 | 0 |
+| get-tx | ToplingDB | 16 | 500000 | 4,505,924.15 | 0.002839 | 0.004405 | 0.006167 | 0.042284 | 0 |
+| get-object-version | RocksDB | 64 | 500000 | 810,844.61 | 0.060759 | 0.163501 | 0.270301 | 0.624569 | 0 |
+| get-object-version | ToplingDB | 32 | 500000 | 3,663,629.65 | 0.007045 | 0.011840 | 0.029747 | 0.060765 | 0 |
+| get-object-last-seen | RocksDB | 64 | 500000 | 2,006,191.20 | 0.021844 | 0.070945 | 0.136572 | 0.348743 | 0 |
+| get-object-last-seen | ToplingDB | 16 | 500000 | 4,850,173.58 | 0.002642 | 0.004110 | 0.005675 | 0.032095 | 0 |
+| multi-get-tx | RocksDB | 32 | 500000 | 147,620.54 | 0.207511 | 0.298457 | 0.403023 | 0.616534 | 0 |
+| multi-get-tx | ToplingDB | 64 | 500000 | 2,145,447.31 | 0.025150 | 0.038165 | 0.072123 | 0.124968 | 0 |
+| multi-get-object-version | RocksDB | 32 | 500000 | 80,317.22 | 0.387713 | 0.516063 | 0.627478 | 0.834797 | 0 |
+| multi-get-object-version | ToplingDB | 64 | 500000 | 1,224,063.04 | 0.037295 | 0.066563 | 0.097495 | 0.192934 | 0 |
+| scan-events | RocksDB | 64 | 500000 | 1,469,092.00 | 0.034659 | 0.075698 | 0.132257 | 0.271179 | 0 |
+| scan-events | ToplingDB | 64 | 500000 | 1,583,457.04 | 0.033855 | 0.063404 | 0.103031 | 0.178078 | 0 |
+| mixed-rpc | RocksDB | 32 | 500000 | 330,293.65 | 0.035573 | 0.438297 | 0.527992 | 0.691973 | 0 |
+| mixed-rpc | ToplingDB | 64 | 500000 | 2,722,918.70 | 0.011939 | 0.059402 | 0.090327 | 0.151685 | 0 |
+
+## Head-to-Head
+
+| Workload | ToplingDB best-throughput advantage | ToplingDB p99 change at best-throughput points |
+|---|---:|---:|
+| get-tx | `+231.0%` | `-96.7%` |
+| get-object-version | `+351.8%` | `-89.0%` |
+| get-object-last-seen | `+141.8%` | `-95.8%` |
+| multi-get-tx | `+1353.4%` | `-82.1%` |
+| multi-get-object-version | `+1424.0%` | `-84.5%` |
+| scan-events | `+7.8%` | `-22.1%` |
+| mixed-rpc | `+724.4%` | `-82.9%` |
 
 ## Disk Usage
 
-| Backend | Disk usage bytes |
-|---|---:|
-| RocksDB | 4000002170 |
-| ToplingDB | 4000004537 |
+| Backend | Disk usage bytes | Approx size |
+|---|---:|---:|
+| RocksDB | 6,244,820,049 | 5.82 GiB |
+| ToplingDB | 1,337,044,105 | 1.25 GiB |
 
-Difference:
-
-- ToplingDB uses `2,367` more bytes in this run, which is effectively negligible at the current dataset size.
+ToplingDB uses about `78.6%` less disk than RocksDB in this report bundle, or roughly `4.7x` less physical space for the same logical benchmark-facing data.
 
 ## Source Reports
 
 - RocksDB report dir: [data/report1](../data/report1)
 - ToplingDB report dir: [data/report2](../data/report2)
-- RocksDB DB path: `/data4/sui-hotstore-route1-mainnet-270700000-270709999-rocksdb/db-a`
-- ToplingDB DB path: `/data4/sui-hotstore-route1-mainnet-270700000-270709999-toplingdb/db-a`
+- RocksDB DB path: `/data4/sui-hotstore-route1-mainnet-270700000-270759999-rocksdb/db-a`
+- ToplingDB DB path: `/data4/sui-hotstore-route1-mainnet-270700000-270759999-toplingdb/db-a`
 
 ## Observations
 
 - Data equality:
-  - All benchmark-facing data column families match by checksum.
-  - The only mismatch is `cf_meta`, which differs by `2` value bytes, so total DB checksum does not match byte-for-byte.
+  - The benchmark-facing data column families match by entry count, key bytes, value bytes, and checksum.
+  - The only checksum mismatch is `cf_meta`, with a `2`-byte value difference.
 - Point lookup:
-  - `get-tx`: RocksDB is about `13.7%` faster at its best run.
-  - `get-object-version`: ToplingDB is about `6.0%` faster at its best run and has slightly better p99/p999 latency.
-  - `get-object-last-seen`: RocksDB is about `8.9%` faster at its best run, with near-identical p95/p99 latency.
+  - ToplingDB is faster on all three point lookup workloads at the best-throughput point.
+  - The strongest point lookup win is `get-object-version`, where ToplingDB is about `4.5x` RocksDB throughput.
 - Multi-get:
-  - `multi-get-tx`: ToplingDB is about `3.6%` faster and has better p50/p95/p99 latency, while RocksDB has a slightly better p999 latency.
-  - `multi-get-object-version`: ToplingDB is about `14.3%` faster and has better p50/p95/p99/p999 latency.
+  - ToplingDB is over an order of magnitude faster on both multi-get workloads.
+  - `multi-get-object-version` is the largest win in this report: about `15.2x` RocksDB throughput.
 - Prefix scan:
-  - `scan-events`: ToplingDB is about `2.1%` faster and slightly better on p50/p95/p99 latency; RocksDB is slightly better at p999.
+  - `scan-events` is the closest workload.
+  - ToplingDB is still ahead by about `7.8%` throughput and has lower p99/p999 latency at the best-throughput point.
 - Mixed RPC:
-  - `mixed-rpc`: RocksDB is about `2.8%` faster at the best-throughput point.
-  - Tail latency is effectively tied, with ToplingDB very slightly better at p999 and RocksDB very slightly better at p99.
+  - ToplingDB is about `8.2x` RocksDB throughput on the mixed workload.
+  - This is the clearest end-to-end DB-level serving win in the current report because it combines point lookups, multi-get, and event scan behavior.
 - Tail latency:
-  - Single-key lookups remain effectively sub-millisecond for both backends.
-  - The clearest ToplingDB latency win in this run is `multi-get-object-version`.
-  - The clearest RocksDB throughput wins in this run are `get-tx` and `get-object-last-seen`.
+  - ToplingDB has lower p99 at the selected best-throughput point for every workload in this run.
+  - The biggest p99 reductions are on point lookups, where ToplingDB's p99 is roughly one order of magnitude lower.
 - Disk footprint:
-  - Disk usage is effectively identical in this run.
-- Overall:
-  - This larger report bundle is mixed rather than uniformly favorable to one backend.
-  - ToplingDB is ahead on `get-object-version`, `multi-get-tx`, `multi-get-object-version`, and `scan-events`.
-  - RocksDB is ahead on `get-tx`, `get-object-last-seen`, and `mixed-rpc`.
-  - ToplingDB's strongest result is `multi-get-object-version`; RocksDB's strongest result is `get-tx`.
+  - ToplingDB's physical footprint is much smaller in this run despite matching the benchmark-facing logical data.
 
 ## Caveats
 
@@ -141,4 +152,4 @@ Difference:
 - `owner_touched_objects` is not complete wallet inventory.
 - Benchmark results are hardware-specific.
 - API benchmark results are intentionally omitted until DB-level results are stable and repeatable.
-- The current public benchmark evidence is based on a `10,000` checkpoint route 1 run because the much larger formal-snapshot path still has long local `sui-node` pruning / compaction time before it becomes benchmark-ready.
+- The RocksDB and ToplingDB binaries were built from different git SHAs in this report bundle; the workload metadata captures those SHAs for traceability.

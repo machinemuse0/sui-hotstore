@@ -1,7 +1,7 @@
 {
   "backend": "toplingdb",
-  "db_path": "/data4/sui-hotstore-route1-mainnet-270700000-270709999-toplingdb/db-a",
-  "disk_usage_bytes": 4000004537,
+  "db_path": "/data4/sui-hotstore-route1-mainnet-270700000-270759999-toplingdb/db-a",
+  "disk_usage_bytes": 1337044105,
   "column_families": {
     "cf_checkpoint": {
       "entries": 60000,

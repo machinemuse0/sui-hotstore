@@ -1,7 +1,7 @@
 {
   "backend": "rocksdb",
-  "db_path": "/data4/sui-hotstore-route1-mainnet-270700000-270709999-rocksdb/db-a",
-  "disk_usage_bytes": 4000002170,
+  "db_path": "/data4/sui-hotstore-route1-mainnet-270700000-270759999-rocksdb/db-a",
+  "disk_usage_bytes": 6244820049,
   "column_families": {
     "cf_checkpoint": {
       "entries": 60000,
@@ -19,7 +19,7 @@
       "entries": 9,
       "key_bytes": 130,
       "value_bytes": 290,
-      "sha256": "0bb1b1f4aea9a2f9abe6771298e43a413a75d73ef8440dff0a7169c7f54e5528"
+      "sha256": "19e26065c753bb07b0908467ee6ca7d47c74cfd3050dddb157077b2ed4c70b79"
     },
     "cf_object_last_seen": {
       "entries": 79125,
@@ -57,6 +57,6 @@
     "entries": 6242137,
     "key_bytes": 613806478,
     "value_bytes": 2319130899,
-    "sha256": "7adfc56a357db9d03612cfb9b8ae541c1e458abcee17f93f7e02d8f3b5d50e13"
+    "sha256": "16e2f4720c874e41630cbb40b3b69439e374d8c8f8ac65ec371380e9e34809d1"
   }
 }
