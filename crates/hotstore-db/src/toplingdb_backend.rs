@@ -64,6 +64,14 @@ impl StorageEngine for ToplingDbBackend {
         self.inner.multi_get_impl()
     }
 
+    fn cf_handle_mode(&self) -> &'static str {
+        self.inner.cf_handle_mode()
+    }
+
+    fn read_options_mode(&self) -> &'static str {
+        self.inner.read_options_mode()
+    }
+
     fn put(&self, cf: ColumnFamily, key: &[u8], value: &[u8]) -> Result<()> {
         self.inner.put(cf, key, value)
     }

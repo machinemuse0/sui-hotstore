@@ -297,6 +297,8 @@ pub fn run_benchmark_suite(config: BenchmarkConfig) -> Result<BenchmarkSuiteRepo
             cpu_model: cpu_model(),
             total_memory_bytes: total_memory_bytes(),
             multi_get_impl: engine.multi_get_impl().to_owned(),
+            cf_handle_mode: engine.cf_handle_mode().to_owned(),
+            read_options_mode: engine.read_options_mode().to_owned(),
             toplingdb_config: toplingdb_config_fingerprint(),
             checksum_report: config
                 .checksum_report_path

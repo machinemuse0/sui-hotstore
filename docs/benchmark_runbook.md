@@ -594,6 +594,18 @@ bash scripts/gen-bench-keys-from-sui-db.sh \
 
 #### 正式 benchmark 建议使用 release
 
+默认读路径优化：
+
+- CF handles 在 DB open 时缓存，避免每次按 CF 名称走带锁查找。
+- `ReadOptions` 按 backend/thread 缓存，默认模式是 `thread-local-scope-pin`。
+- 如果要测试长作用域 pin，可以在 benchmark 前设置：
+
+```bash
+export HOTSTORE_READ_OPTIONS_MODE=thread-local-long-pin
+```
+
+这个模式会让每个 backend/thread 的 `ReadOptions` 在首次使用时 `start_pin()`，线程退出或 backend 在当前线程 drop 时 `finish_pin()`。为避免 backend 早于其它线程的 TLS 清理而销毁 DB，long-pin 的 TLS 条目会持有一份 DB 引用；因此它不会对已销毁的 DB 调 `finish_pin()`，但可能把 DB 生命周期延长到触碰过该 backend 的 worker 线程退出。建议先只用于 read-only benchmark，不要直接推广到会反复 open/drop backend 的长期服务进程。
+
 ```bash
 scripts/run-benchmark-suite.sh \
   --backend rocksdb \

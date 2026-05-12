@@ -62,6 +62,14 @@ pub trait StorageEngine: Send + Sync + 'static {
         "unknown"
     }
 
+    fn cf_handle_mode(&self) -> &'static str {
+        "backend-default"
+    }
+
+    fn read_options_mode(&self) -> &'static str {
+        "backend-default"
+    }
+
     fn put(&self, cf: ColumnFamily, key: &[u8], value: &[u8]) -> Result<()>;
 
     fn write_batch(&self, batch: HotWriteBatch) -> Result<()>;
