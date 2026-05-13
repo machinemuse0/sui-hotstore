@@ -2,6 +2,7 @@ use std::array;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::path::Path;
+use std::rc::Rc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
@@ -20,7 +21,7 @@ const READ_OPTIONS_MODE_ENV: &str = "HOTSTORE_READ_OPTIONS_MODE";
 static NEXT_READ_OPTIONS_KEY: AtomicUsize = AtomicUsize::new(1);
 
 thread_local! {
-    static READ_OPTIONS_CACHE: RefCell<HashMap<usize, Box<ThreadReadOptions>>> =
+    static READ_OPTIONS_CACHE: RefCell<HashMap<usize, Rc<ThreadReadOptions>>> =
         RefCell::new(HashMap::new());
 }
 
@@ -89,20 +90,18 @@ impl RocksDbBackend {
     fn with_read_options<T>(&self, f: impl FnOnce(&ReadOptions) -> T) -> T {
         let readopts = READ_OPTIONS_CACHE.with(|cache| {
             let mut cache = cache.borrow_mut();
-            let entry = cache.entry(self.read_options_key).or_insert_with(|| {
-                Box::new(ThreadReadOptions::new(
-                    self.read_options_mode,
-                    self.db.clone(),
-                ))
-            });
-            &**entry as *const ThreadReadOptions
+            cache
+                .entry(self.read_options_key)
+                .or_insert_with(|| {
+                    Rc::new(ThreadReadOptions::new(
+                        self.read_options_mode,
+                        self.db.clone(),
+                    ))
+                })
+                .clone()
         });
 
-        // SAFETY: the pointer targets a Box stored in this thread's TLS map.
-        // We release the RefCell borrow before running `f`, so nested reads do
-        // not panic. The Box allocation itself is stable even if a nested call
-        // inserts more entries into the HashMap.
-        unsafe { (*readopts).with_read_options(f) }
+        readopts.with_read_options(f)
     }
 }
 
