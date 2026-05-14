@@ -1,5 +1,6 @@
 mod checksum;
 mod export_keys;
+mod raw_sync;
 
 use std::path::PathBuf;
 
@@ -11,6 +12,7 @@ use crate::checksum::{
     compare_checksum_reports, compute_checksum_report, compute_stats_report, write_json_output,
 };
 use crate::export_keys::{export_bench_keys, BenchKeyExportConfig};
+use crate::raw_sync::{export_raw_to_path, import_raw_from_path, RawImportConfig};
 
 #[derive(Debug, Parser)]
 #[command(name = "hotstore-admin")]
@@ -61,6 +63,32 @@ enum Command {
         object_id_limit: usize,
         #[arg(long, default_value_t = 1_000)]
         event_type_limit: usize,
+        #[arg(long)]
+        output: Option<PathBuf>,
+    },
+    ExportRaw {
+        #[arg(long)]
+        backend: BackendKind,
+        #[arg(long)]
+        db_path: PathBuf,
+        #[arg(long)]
+        output: Option<PathBuf>,
+        #[arg(long)]
+        report_output: Option<PathBuf>,
+    },
+    ImportRaw {
+        #[arg(long)]
+        backend: BackendKind,
+        #[arg(long)]
+        db_path: PathBuf,
+        #[arg(long)]
+        input: Option<PathBuf>,
+        #[arg(long, default_value_t = 50_000)]
+        batch_rows: usize,
+        #[arg(long)]
+        allow_existing: bool,
+        #[arg(long)]
+        compact: bool,
         #[arg(long)]
         output: Option<PathBuf>,
     },
@@ -120,6 +148,44 @@ fn main() -> Result<()> {
                 },
             )?;
             write_json_output(&manifest, output.as_deref())?;
+        }
+        Command::ExportRaw {
+            backend,
+            db_path,
+            output,
+            report_output,
+        } => {
+            let report = export_raw_to_path(backend, &db_path, output.as_deref())?;
+            if output.is_some() || report_output.is_some() {
+                write_json_output(&report, report_output.as_deref())?;
+            } else {
+                eprintln!(
+                    "exported {} rows from {} to stdout",
+                    report.totals.entries,
+                    db_path.display()
+                );
+            }
+        }
+        Command::ImportRaw {
+            backend,
+            db_path,
+            input,
+            batch_rows,
+            allow_existing,
+            compact,
+            output,
+        } => {
+            let report = import_raw_from_path(
+                backend,
+                &db_path,
+                input.as_deref(),
+                RawImportConfig {
+                    batch_rows,
+                    allow_existing,
+                    compact,
+                },
+            )?;
+            write_json_output(&report, output.as_deref())?;
         }
     }
 
