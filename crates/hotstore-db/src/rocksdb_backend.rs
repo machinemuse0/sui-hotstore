@@ -1,32 +1,51 @@
+use std::fmt;
 use std::path::Path;
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use hotstore_core::ColumnFamily;
-use rocksdb::{Direction, IteratorMode, Options, WriteBatch, DB};
+use rocksdb::{
+    BlockBasedOptions, Cache, ColumnFamilyDescriptor, DBCompressionType, Direction, IteratorMode,
+    Options, WriteBatch, DB,
+};
 
 use crate::traits::{HotWriteBatch, ScanOutcome, StorageEngine};
 
-#[derive(Debug)]
+const ROCKSDB_BLOCK_CACHE_SIZE_BYTES: usize = 64 * 1024 * 1024 * 1024;
+
 pub struct RocksDbBackend {
     db: DB,
+    _block_cache: Cache,
+}
+
+impl fmt::Debug for RocksDbBackend {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("RocksDbBackend")
+            .field("db", &self.db)
+            .field("block_cache_size_bytes", &ROCKSDB_BLOCK_CACHE_SIZE_BYTES)
+            .finish()
+    }
 }
 
 impl RocksDbBackend {
     pub fn open(path: impl AsRef<Path>) -> Result<Self> {
-        let mut options = Options::default();
+        let block_cache = Cache::new_lru_cache(ROCKSDB_BLOCK_CACHE_SIZE_BYTES);
+        let mut options = rocksdb_options(&block_cache);
         options.create_if_missing(true);
         options.create_missing_column_families(true);
 
         let descriptors = ColumnFamily::ALL
             .into_iter()
-            .map(|cf| rocksdb::ColumnFamilyDescriptor::new(cf.as_str(), Options::default()))
+            .map(|cf| ColumnFamilyDescriptor::new(cf.as_str(), rocksdb_options(&block_cache)))
             .collect::<Vec<_>>();
 
         let db = DB::open_cf_descriptors(&options, path, descriptors)
             .context("failed to open RocksDB backend")?;
 
-        Ok(Self { db })
+        Ok(Self {
+            db,
+            _block_cache: block_cache,
+        })
     }
 
     fn cf_handle(&self, cf: ColumnFamily) -> Result<Arc<rocksdb::BoundColumnFamily<'_>>> {
@@ -34,6 +53,16 @@ impl RocksDbBackend {
             .cf_handle(cf.as_str())
             .with_context(|| format!("missing RocksDB column family `{cf}`"))
     }
+}
+
+fn rocksdb_options(block_cache: &Cache) -> Options {
+    let mut table_options = BlockBasedOptions::default();
+    table_options.set_block_cache(block_cache);
+
+    let mut options = Options::default();
+    options.set_block_based_table_factory(&table_options);
+    options.set_compression_type(DBCompressionType::Snappy);
+    options
 }
 
 impl StorageEngine for RocksDbBackend {

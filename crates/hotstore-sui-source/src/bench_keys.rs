@@ -90,8 +90,10 @@ impl BenchKeySink {
 
     pub fn finalize(&self) -> Result<BenchKeyManifest> {
         let tx_count = sort_unique_lines(&self.tx_raw_path(), &self.tx_out_path())?;
-        let object_version_count =
-            sort_unique_lines(&self.object_versions_raw_path(), &self.object_versions_out_path())?;
+        let object_version_count = sort_unique_lines(
+            &self.object_versions_raw_path(),
+            &self.object_versions_out_path(),
+        )?;
         let object_id_count =
             sort_unique_lines(&self.object_ids_raw_path(), &self.object_ids_out_path())?;
         let event_type_count =
@@ -270,8 +272,13 @@ fn sort_unique_lines(raw_path: &Path, out_path: &Path) -> Result<usize> {
     out.flush()
         .with_context(|| format!("failed to flush {}", temp_path.display()))?;
 
-    fs::rename(&temp_path, out_path)
-        .with_context(|| format!("failed to rename {} to {}", temp_path.display(), out_path.display()))?;
+    fs::rename(&temp_path, out_path).with_context(|| {
+        format!(
+            "failed to rename {} to {}",
+            temp_path.display(),
+            out_path.display()
+        )
+    })?;
     Ok(lines.len())
 }
 
@@ -281,8 +288,13 @@ fn write_json_atomic<T: Serialize>(path: &Path, value: &T) -> Result<()> {
         .with_context(|| format!("failed to serialize {}", path.display()))?;
     fs::write(&temp_path, bytes)
         .with_context(|| format!("failed to write {}", temp_path.display()))?;
-    fs::rename(&temp_path, path)
-        .with_context(|| format!("failed to rename {} to {}", temp_path.display(), path.display()))?;
+    fs::rename(&temp_path, path).with_context(|| {
+        format!(
+            "failed to rename {} to {}",
+            temp_path.display(),
+            path.display()
+        )
+    })?;
     Ok(())
 }
 

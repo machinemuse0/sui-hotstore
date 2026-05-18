@@ -29,7 +29,8 @@ async fn main() -> Result<()> {
         .as_ref()
         .map(|dir| BenchKeySink::open(dir, &cli.network, cli.first_checkpoint, cli.last_checkpoint))
         .transpose()?;
-    let effective_first_checkpoint = resolve_effective_first_checkpoint(&*backend, &cli, bench_key_sink.as_ref())?;
+    let effective_first_checkpoint =
+        resolve_effective_first_checkpoint(&*backend, &cli, bench_key_sink.as_ref())?;
 
     persist_run_metadata(&*backend, &cli, None)?;
 
@@ -172,8 +173,9 @@ fn resolve_effective_first_checkpoint(
         .transpose()?;
 
     let key_watermark = match (&cli.bench_keys_dir, bench_key_sink) {
-        (Some(dir), Some(_)) => BenchKeySink::read_progress(dir)?
-            .map(|progress| progress.last_flushed_checkpoint),
+        (Some(dir), Some(_)) => {
+            BenchKeySink::read_progress(dir)?.map(|progress| progress.last_flushed_checkpoint)
+        }
         _ => None,
     };
 
