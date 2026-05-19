@@ -146,32 +146,37 @@ Current implemented workloads:
 Current public summary artifact:
 
 - [reports/summary.md](reports/summary.md)
+- [reports/summary-2026-05-18-rocksdb-snappy-vs-toplingdb.md](reports/summary-2026-05-18-rocksdb-snappy-vs-toplingdb.md)
 
-Current headline comparison:
+Current headline comparison, based on the 2026-05-18 RocksDB snappy vs ToplingDB run:
 
 - RocksDB results are based on the `master` branch.
 - ToplingDB results are based on the `topling` branch.
+- RocksDB uses snappy compression and the HotStore RocksDB backend configures a 64 GiB block cache.
+- The benchmark JSON `dataset` labels were passed incorrectly in this run; data equality is verified by matching `stats.json` and `checksum.json`.
 
 | Metric | RocksDB | ToplingDB | ToplingDB vs RocksDB |
 |---|---:|---:|---:|
 | Checkpoint range | `270700000..270759999` | `270700000..270759999` | same data |
-| Imported checkpoints | `60,000` | `60,000` | same data |
-| Logical entries | `6,242,137` | `6,242,137` | same data |
-| Disk usage | `5.82 GiB` | `1.25 GiB` | `78.6%` less |
-| get-tx | `1.36M rps` | `4.51M rps` | `3.31x` |
-| get-object-version | `0.81M rps` | `3.66M rps` | `4.52x` |
-| get-object-last-seen | `2.01M rps` | `4.85M rps` | `2.42x` |
-| multi-get-tx | `0.15M rps` | `2.15M rps` | `14.53x` |
-| multi-get-object-version | `0.08M rps` | `1.22M rps` | `15.24x` |
-| scan-events | `1.47M rps` | `1.58M rps` | `1.08x` |
-| mixed-rpc | `0.33M rps` | `2.72M rps` | `8.24x` |
+| Logical entries | `67,204,261` | `67,204,261` | same data |
+| Checksum | `6edbe080a8d3...` | `6edbe080a8d3...` | same data |
+| Disk usage | `6.51 GiB` | `3.37 GiB` | `48.3%` less |
+| get-tx | `2.89M rps` | `9.30M rps` | `3.22x` |
+| get-object-version | `2.48M rps` | `7.39M rps` | `2.98x` |
+| get-object-last-seen | `3.54M rps` | `13.57M rps` | `3.84x` |
+| multi-get-tx | `0.36M rps` | `1.29M rps` | `3.59x` |
+| multi-get-object-version | `0.30M rps` | `1.16M rps` | `3.89x` |
+| mixed-rpc | `1.16M rps` | `3.12M rps` | `2.68x` |
+| scan-events | `2.40M rps` | `1.72M rps` | RocksDB `1.39x` |
+
+Compared with the prior uncompressed RocksDB run at about `27.49 GiB`, the compressed RocksDB footprint is `6.51 GiB`, a `76.3%` reduction. ToplingDB remains about `1.93x` smaller than compressed RocksDB on the same logical dataset.
 
 Current benchmark-data note:
 
 - We restored about `200G` of Sui data via the formal snapshot path.
 - In practice, bringing a local `sui-node` on top of that dataset to a stable benchmark-ready state currently involves a long pruning / compaction window.
 - Because of that, the current public benchmark evidence is based on a bounded route 1 workflow over checkpoints `270700000..270759999`.
-- The current comparison covers `60,000` checkpoints, `6,242,137` logical entries, and DB-level workloads with matching benchmark-facing data column-family checksums.
+- The latest comparison covers `67,204,261` logical entries and DB-level workloads with matching full-store checksums.
 
 Related benchmark materials:
 

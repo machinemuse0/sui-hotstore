@@ -11,6 +11,27 @@
   - API-level benchmark: still out of scope for this report
 - Summary selection rule: for each workload/backend pair, this summary uses the run with the highest `throughput_rps`
 
+## Additional Result: 2026-05-18 RocksDB Snappy vs ToplingDB
+
+Detailed report: [summary-2026-05-18-rocksdb-snappy-vs-toplingdb.md](summary-2026-05-18-rocksdb-snappy-vs-toplingdb.md)
+
+This run uses the same logical dataset on both backends, verified by identical entry counts and checksum. The benchmark JSON `dataset` labels were passed incorrectly during the run, so this summary treats `stats.json`, `checksum.json`, and the DB paths as the source of truth.
+
+| Metric | RocksDB snappy | ToplingDB | Result |
+|---|---:|---:|---|
+| logical entries | 67,204,261 | 67,204,261 | match |
+| checksum | `6edbe080a8d3...` | `6edbe080a8d3...` | match |
+| disk usage | 6.51 GiB | 3.37 GiB | ToplingDB 48.3% less |
+| get-tx peak rps | 2,887,184 | 9,303,347 | ToplingDB 3.22x |
+| get-object-version peak rps | 2,478,623 | 7,387,090 | ToplingDB 2.98x |
+| get-object-last-seen peak rps | 3,537,405 | 13,571,198 | ToplingDB 3.84x |
+| multi-get-tx peak rps | 358,761 | 1,289,705 | ToplingDB 3.59x |
+| multi-get-object-version peak rps | 298,336 | 1,160,008 | ToplingDB 3.89x |
+| mixed-rpc peak rps | 1,161,423 | 3,115,361 | ToplingDB 2.68x |
+| scan-events peak rps | 2,398,263 | 1,722,725 | RocksDB 1.39x |
+
+Compression materially changes the RocksDB footprint: the earlier uncompressed RocksDB run was about `27.49 GiB`, while this snappy-compressed RocksDB run is `6.51 GiB`, a `76.3%` reduction. ToplingDB remains smaller at `3.37 GiB` and remains faster on point lookup, multi-get, and mixed RPC workloads; RocksDB is faster on `scan-events`.
+
 ## Dataset
 
 - Source: route 1 bounded-range ingestion from live Sui checkpoint data
