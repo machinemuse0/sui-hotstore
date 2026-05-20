@@ -141,6 +141,44 @@ vmstat 1 > reports/sys/vmstat.log &
 pidstat -dru 1 > reports/sys/pidstat.log &
 ```
 
+也可以用仓库内的内存采样脚本直接包住整轮 DB benchmark。它会采样 benchmark 进程树的 RSS / VSZ，并输出 `memory-samples.csv` 和 `memory-summary.json`，后续 summary 可以读取其中的 `peak_rss_bytes`：
+
+```bash
+scripts/monitor-benchmark-memory.sh \
+  --label rocksdb-snappy \
+  --interval 1 \
+  --output-dir /data4/sui-hotstore-route1-mainnet-270700000-270759999-rocksdb-snappy/reports/memory \
+  -- scripts/run-benchmark-suite.sh \
+    --backend rocksdb \
+    --db-path /data4/sui-hotstore-route1-mainnet-270700000-270759999-rocksdb-snappy/db-a \
+    --keys-dir /data4/sui-hotstore-route1-mainnet-270700000-270759999-rocksdb-snappy/keys \
+    --report-dir /data4/sui-hotstore-route1-mainnet-270700000-270759999-rocksdb-snappy/reports \
+    --dataset mainnet-270700000-270759999 \
+    --requests 1000000 \
+    --warmup-requests 100000 \
+    --concurrency 1,4,8,16,32,64 \
+    --access-pattern uniform \
+    --scan-mode count \
+    --cache-state hot \
+    --min-hit-rate 1.0 \
+    --batch-size 10 \
+    --cargo-profile release
+```
+
+如果 benchmark 已经在运行，也可以监控已有 PID：
+
+```bash
+scripts/monitor-benchmark-memory.sh \
+  --label rocksdb-running \
+  --output-dir reports/memory/rocksdb-running \
+  --pid <benchmark-pid>
+```
+
+注意：
+
+- 这个脚本统计的是目标进程树的 RSS / VSZ，不包含系统 page cache 的整体变化。
+- RocksDB block cache 和 ToplingDB 进程内常驻内存会反映在 RSS 中；mmap 或 page cache 行为仍建议结合 `vmstat` / `pidstat` / `/proc/meminfo` 一起看。
+
 ## 5. Backend 切换策略
 
 ### RocksDB baseline
