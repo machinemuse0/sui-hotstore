@@ -23,6 +23,7 @@ Usage:
     [--min-requests-per-worker <count>] \
     [--batch-size <count>] \
     [--cargo-profile <dev|release>] \
+    [--bin-dir <path>] \
     [--compare-checksum-with <path>]
 
 This DB-only suite runs the currently implemented benchmark workloads:
@@ -62,6 +63,7 @@ MIN_HIT_RATE=""
 MIN_REQUESTS_PER_WORKER="1"
 BATCH_SIZE="50"
 CARGO_PROFILE="release"
+BIN_DIR=""
 COMPARE_CHECKSUM_WITH=""
 TARGET_NOFILE="1048576"
 
@@ -139,6 +141,10 @@ while [[ $# -gt 0 ]]; do
       CARGO_PROFILE="${2:-}"
       shift 2
       ;;
+    --bin-dir)
+      BIN_DIR="${2:-}"
+      shift 2
+      ;;
     --compare-checksum-with)
       COMPARE_CHECKSUM_WITH="${2:-}"
       shift 2
@@ -175,6 +181,17 @@ if [[ "$CARGO_PROFILE" != "release" && "$CARGO_PROFILE" != "dev" ]]; then
   exit 1
 fi
 
+if [[ -n "$BIN_DIR" ]]; then
+  if [[ ! -x "$BIN_DIR/hotstore-admin" ]]; then
+    echo "missing executable: $BIN_DIR/hotstore-admin" >&2
+    exit 1
+  fi
+  if [[ ! -x "$BIN_DIR/hotstore-bench" ]]; then
+    echo "missing executable: $BIN_DIR/hotstore-bench" >&2
+    exit 1
+  fi
+fi
+
 if [[ "$ACCESS_PATTERN" != "sequential" && "$ACCESS_PATTERN" != "uniform" ]]; then
   echo "--access-pattern must be sequential or uniform" >&2
   exit 1
@@ -204,11 +221,29 @@ done
 
 mkdir -p "$REPORT_DIR/db" "$REPORT_DIR/checksum"
 
-if [[ "$CARGO_PROFILE" == "release" ]]; then
-  CARGO_ARGS=(run --release)
-else
-  CARGO_ARGS=(run)
+if [[ -z "$BIN_DIR" ]]; then
+  if [[ "$CARGO_PROFILE" == "release" ]]; then
+    CARGO_ARGS=(run --release)
+  else
+    CARGO_ARGS=(run)
+  fi
 fi
+
+run_hotstore_admin() {
+  if [[ -n "$BIN_DIR" ]]; then
+    "$BIN_DIR/hotstore-admin" "$@"
+  else
+    cargo "${CARGO_ARGS[@]}" --bin hotstore-admin -- "$@"
+  fi
+}
+
+run_hotstore_bench() {
+  if [[ -n "$BIN_DIR" ]]; then
+    "$BIN_DIR/hotstore-bench" "$@"
+  else
+    cargo "${CARGO_ARGS[@]}" --bin hotstore-bench -- "$@"
+  fi
+}
 
 CURRENT_NOFILE="$(ulimit -n)"
 if [[ "$CURRENT_NOFILE" =~ ^[0-9]+$ ]] && (( CURRENT_NOFILE < TARGET_NOFILE )); then
@@ -220,14 +255,14 @@ if [[ "$CURRENT_NOFILE" =~ ^[0-9]+$ ]] && (( CURRENT_NOFILE < TARGET_NOFILE )); 
 fi
 
 echo "[1/9] stats (${BACKEND})"
-cargo "${CARGO_ARGS[@]}" --bin hotstore-admin -- \
+run_hotstore_admin \
   stats \
   --backend "$BACKEND" \
   --db-path "$DB_PATH" \
   --output "$REPORT_DIR/stats.json"
 
 echo "[2/9] checksum (${BACKEND})"
-cargo "${CARGO_ARGS[@]}" --bin hotstore-admin -- \
+run_hotstore_admin \
   checksum \
   --backend "$BACKEND" \
   --db-path "$DB_PATH" \
@@ -235,7 +270,7 @@ cargo "${CARGO_ARGS[@]}" --bin hotstore-admin -- \
 
 if [[ -n "$COMPARE_CHECKSUM_WITH" ]]; then
   echo "[2b/9] compare-checksum (${BACKEND})"
-  cargo "${CARGO_ARGS[@]}" --bin hotstore-admin -- \
+  run_hotstore_admin \
     compare-checksum \
     --left "$REPORT_DIR/checksum/checksum.json" \
     --right "$COMPARE_CHECKSUM_WITH" \
@@ -261,9 +296,9 @@ run_bench() {
   args+=(--min-requests-per-worker "$MIN_REQUESTS_PER_WORKER")
   args+=(--checksum-report "$REPORT_DIR/checksum/checksum.json")
   if [[ -n "$DATASET" ]]; then
-    cargo "${CARGO_ARGS[@]}" --bin hotstore-bench -- "${args[@]}" --dataset "$DATASET"
+    run_hotstore_bench "${args[@]}" --dataset "$DATASET"
   else
-    cargo "${CARGO_ARGS[@]}" --bin hotstore-bench -- "${args[@]}"
+    run_hotstore_bench "${args[@]}"
   fi
 }
 

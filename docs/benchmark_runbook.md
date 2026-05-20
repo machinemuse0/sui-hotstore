@@ -655,6 +655,87 @@ scripts/run-benchmark-suite.sh \
 
 同理再跑一轮 ToplingDB。
 
+如果二进制已经提前编译好，不希望 `run-benchmark-suite.sh` 再触发 `cargo run` / 编译，可以传 `--bin-dir`。该目录下需要有 `hotstore-admin` 和 `hotstore-bench` 两个可执行文件：
+
+```bash
+scripts/run-benchmark-suite.sh \
+  --backend rocksdb \
+  --db-path /data4/sui-hotstore-route1-mainnet-270700000-270759999-rocksdb-snappy/db-a \
+  --keys-dir /data4/sui-hotstore-route1-mainnet-270700000-270759999-rocksdb-snappy/keys \
+  --report-dir /data4/sui-hotstore-route1-mainnet-270700000-270759999-rocksdb-snappy/reports \
+  --dataset mainnet-270700000-270759999 \
+  --requests 1000000 \
+  --warmup-requests 100000 \
+  --concurrency 1,4,8,16,32,64 \
+  --access-pattern uniform \
+  --scan-mode count \
+  --cache-state hot \
+  --min-hit-rate 1.0 \
+  --batch-size 10 \
+  --bin-dir /data/osc/sui-hotstore/target1/release
+```
+
+ToplingDB 同理，只需要把 `--backend`、`--db-path`、`--keys-dir`、`--report-dir` 和 `--bin-dir` 换成 ToplingDB 对应路径，并确保环境变量已经设置：
+
+```bash
+export TOPLINGDB_EASY_MIGRATE_CONF=/data7/osc/sui/crates/typed-store/config/topling_sui.yaml
+```
+
+如果同时要记录内存，把上面的命令放到 `monitor-benchmark-memory.sh` 后面即可。推荐正式跑 benchmark 时都用这种形式：
+
+```bash
+scripts/monitor-benchmark-memory.sh \
+  --label rocksdb-snappy \
+  --interval 1 \
+  --output-dir /data4/sui-hotstore-route1-mainnet-270700000-270759999-rocksdb-snappy/reports/memory \
+  -- scripts/run-benchmark-suite.sh \
+    --backend rocksdb \
+    --db-path /data4/sui-hotstore-route1-mainnet-270700000-270759999-rocksdb-snappy/db-a \
+    --keys-dir /data4/sui-hotstore-route1-mainnet-270700000-270759999-rocksdb-snappy/keys \
+    --report-dir /data4/sui-hotstore-route1-mainnet-270700000-270759999-rocksdb-snappy/reports \
+    --dataset mainnet-270700000-270759999 \
+    --requests 1000000 \
+    --warmup-requests 100000 \
+    --concurrency 1,4,8,16,32,64 \
+    --access-pattern uniform \
+    --scan-mode count \
+    --cache-state hot \
+    --min-hit-rate 1.0 \
+    --batch-size 10 \
+    --bin-dir /data/osc/sui-hotstore/target1/release
+```
+
+ToplingDB 对应：
+
+```bash
+export TOPLINGDB_EASY_MIGRATE_CONF=/data7/osc/sui/crates/typed-store/config/topling_sui.yaml
+
+scripts/monitor-benchmark-memory.sh \
+  --label toplingdb \
+  --interval 1 \
+  --output-dir /data4/sui-hotstore-route1-mainnet-270700000-270759999-toplingdb-30/reports/memory \
+  -- scripts/run-benchmark-suite.sh \
+    --backend toplingdb \
+    --db-path /data4/sui-hotstore-route1-mainnet-270700000-270759999-toplingdb-30/db-a \
+    --keys-dir /data4/sui-hotstore-route1-mainnet-270700000-270759999-toplingdb-30/keys \
+    --report-dir /data4/sui-hotstore-route1-mainnet-270700000-270759999-toplingdb-30/reports \
+    --dataset mainnet-270700000-270759999 \
+    --requests 1000000 \
+    --warmup-requests 100000 \
+    --concurrency 1,4,8,16,32,64 \
+    --access-pattern uniform \
+    --scan-mode count \
+    --cache-state hot \
+    --min-hit-rate 1.0 \
+    --batch-size 10 \
+    --bin-dir /data/osc/sui-hotstore/target/release
+```
+
+这会在对应 `reports/memory` 目录下生成：
+
+- `memory-samples.csv`
+- `memory-summary.json`
+
 ## 9. 结果目录建议
 
 建议按 backend 和轮次归档：

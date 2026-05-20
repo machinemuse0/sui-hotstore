@@ -25,6 +25,27 @@ Example:
     --label rocksdb-snappy \
     --output-dir /data4/.../reports/memory \
     -- scripts/run-benchmark-suite.sh --backend rocksdb ...
+
+Example with prebuilt benchmark binaries:
+  scripts/monitor-benchmark-memory.sh \
+    --label rocksdb-snappy \
+    --interval 1 \
+    --output-dir /data4/.../reports/memory \
+    -- scripts/run-benchmark-suite.sh \
+      --backend rocksdb \
+      --db-path /data4/.../db-a \
+      --keys-dir /data4/.../keys \
+      --report-dir /data4/.../reports \
+      --dataset mainnet-270700000-270759999 \
+      --requests 1000000 \
+      --warmup-requests 100000 \
+      --concurrency 1,4,8,16,32,64 \
+      --access-pattern uniform \
+      --scan-mode count \
+      --cache-state hot \
+      --min-hit-rate 1.0 \
+      --batch-size 10 \
+      --bin-dir /data/osc/sui-hotstore/target1/release
 EOF
 }
 
