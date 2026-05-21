@@ -337,24 +337,22 @@ impl StorageEngine for RocksDbBackend {
         limit: usize,
     ) -> Result<ScanOutcome> {
         let handle = self.cf_handle(cf);
-        let iter = self
+        let mut iter = self
             .db
             .iterator_cf(handle, IteratorMode::From(prefix, Direction::Forward));
 
         let mut outcome = ScanOutcome::default();
-        for entry in iter {
-            let (key, value) =
-                entry.with_context(|| format!("RocksDB iterator failed for `{cf}`"))?;
+        while let Some(key) = iter.key() {
             if !key.starts_with(prefix) {
                 break;
             }
 
             outcome.rows += 1;
             outcome.key_bytes += key.len();
-            outcome.value_bytes += value.len();
             if outcome.rows >= limit {
                 break;
             }
+            iter.advance_by(1);
         }
 
         Ok(outcome)
