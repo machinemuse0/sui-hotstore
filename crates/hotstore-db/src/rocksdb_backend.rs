@@ -1,51 +1,21 @@
 use std::array;
-use std::cell::RefCell;
-use std::collections::HashMap;
 use std::path::Path;
-use std::rc::Rc;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use hotstore_core::ColumnFamily;
 use rocksdb::{
-    BoundColumnFamily, Direction, IteratorMode, Options, ReadOptions,
-    ReadOptionsScopePinIfNotPinned, WriteBatch, DB,
+    Direction, DBIteratorWithThreadMode, IteratorMode, Options, ReadOptions, WriteBatch, DB,
 };
 
-use crate::traits::{HotWriteBatch, ScanOutcome, StorageEngine};
+use crate::traits::{HotWriteBatch, ScanOutcome, StorageEngine, ThreadContext};
 
 const CF_COUNT: usize = ColumnFamily::ALL.len();
-const READ_OPTIONS_MODE_ENV: &str = "HOTSTORE_READ_OPTIONS_MODE";
 
-static NEXT_READ_OPTIONS_KEY: AtomicUsize = AtomicUsize::new(1);
-
-thread_local! {
-    static READ_OPTIONS_CACHE: RefCell<HashMap<usize, Rc<ThreadReadOptions>>> =
-        RefCell::new(HashMap::new());
-}
-
-struct CachedCfHandle(Arc<BoundColumnFamily<'static>>);
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum ReadOptionsMode {
-    ThreadLocalScopePin,
-    ThreadLocalLongPin,
-}
-
-struct ThreadReadOptions {
-    readopts: ReadOptions,
-    mode: ReadOptionsMode,
-    _db_guard: Option<Arc<DB>>,
-}
-
-#[derive(Debug)]
 pub struct RocksDbBackend {
-    // Drop order matters: cached handles must be released before the DB closes.
-    cf_handles: [CachedCfHandle; CF_COUNT],
+    // Cached CF handles to avoid db.cf_handle() RwLock+HashMap on every op.
+    cf_handles: [Arc<rocksdb::BoundColumnFamily<'static>>; CF_COUNT],
     db: Arc<DB>,
-    read_options_key: usize,
-    read_options_mode: ReadOptionsMode,
 }
 
 impl RocksDbBackend {
@@ -62,149 +32,96 @@ impl RocksDbBackend {
         let db = DB::open_cf_descriptors(&options, path, descriptors)
             .context("failed to open RocksDB backend")?;
         let db = Arc::new(db);
-        let cf_handles =
-            array::from_fn(|index| Self::cache_cf_handle(&db, ColumnFamily::ALL[index]));
-        let read_options_key = NEXT_READ_OPTIONS_KEY.fetch_add(1, Ordering::Relaxed);
-        let read_options_mode = configured_read_options_mode();
 
-        Ok(Self {
-            cf_handles,
-            db,
-            read_options_key,
-            read_options_mode,
-        })
-    }
+        let cf_handles = array::from_fn(|i| {
+            let cf = ColumnFamily::ALL[i];
+            let handle = db.cf_handle(cf.as_str())
+                .unwrap_or_else(|| panic!("missing RocksDB column family `{cf}` after open"));
+            // SAFETY: BoundColumnFamily<'a> has only raw CF handle + PhantomData<&DB>.
+            // The Arc keeps the C handle alive, cf_handles drops before db.
+            unsafe {
+                std::mem::transmute::<
+                    Arc<rocksdb::BoundColumnFamily<'_>>,
+                    Arc<rocksdb::BoundColumnFamily<'static>>,
+                >(handle)
+            }
+        });
 
-    fn cache_cf_handle(db: &Arc<DB>, cf: ColumnFamily) -> CachedCfHandle {
-        let handle = db
-            .cf_handle(cf.as_str())
-            .unwrap_or_else(|| panic!("missing RocksDB column family `{cf}` after open"));
-        CachedCfHandle(static_cf_handle(handle))
+        Ok(Self { cf_handles, db })
     }
 
     #[inline]
-    fn cf_handle(&self, cf: ColumnFamily) -> &Arc<BoundColumnFamily<'static>> {
-        &self.cf_handles[cf_index(cf)].0
+    fn cf_handle(&self, cf: ColumnFamily) -> &Arc<rocksdb::BoundColumnFamily<'static>> {
+        &self.cf_handles[cf as usize]
     }
 
     fn with_read_options<T>(&self, f: impl FnOnce(&ReadOptions) -> T) -> T {
-        let readopts = READ_OPTIONS_CACHE.with(|cache| {
-            let mut cache = cache.borrow_mut();
-            cache
-                .entry(self.read_options_key)
-                .or_insert_with(|| {
-                    Rc::new(ThreadReadOptions::new(
-                        self.read_options_mode,
-                        self.db.clone(),
-                    ))
-                })
-                .clone()
-        });
-
-        readopts.with_read_options(f)
-    }
-}
-
-impl Drop for RocksDbBackend {
-    fn drop(&mut self) {
-        let _ = READ_OPTIONS_CACHE.try_with(|cache| {
-            cache.borrow_mut().remove(&self.read_options_key);
-        });
-    }
-}
-
-impl std::fmt::Debug for CachedCfHandle {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("CachedCfHandle")
-    }
-}
-
-#[allow(unsafe_code)]
-// SAFETY: RocksDB/ToplingDB column-family handles are safe to share across
-// threads. The upstream binding models the lifetime through a raw pointer plus
-// PhantomData, so make the cached-handle assumption explicit at this boundary.
-unsafe impl Send for CachedCfHandle {}
-
-#[allow(unsafe_code)]
-// SAFETY: see the Send impl above.
-unsafe impl Sync for CachedCfHandle {}
-
-impl ThreadReadOptions {
-    fn new(mode: ReadOptionsMode, db: Arc<DB>) -> Self {
         let mut readopts = ReadOptions::default();
-        match mode {
-            ReadOptionsMode::ThreadLocalScopePin => Self {
-                readopts,
-                mode,
-                _db_guard: None,
-            },
-            ReadOptionsMode::ThreadLocalLongPin => {
-                readopts.start_pin();
-                Self {
-                    readopts,
-                    mode,
-                    _db_guard: Some(db),
-                }
-            }
+        let _pin = readopts.scope_pin();
+        f(&readopts)
+    }
+}
+
+/// Per-thread context for RocksDB/ToplingDB operations.
+///
+/// Holds one `ReadOptions` (per-DB) and one cached iterator per
+/// column family, eliminating repeated C API calls in hot loops
+/// such as [`scan_prefix_count`](StorageEngine::scan_prefix_count).
+///
+/// The `'static` on the cached iterators is safe because the caller
+/// (`RocksDbBackend`, which owns `Arc<DB>`) outlives this context.
+pub struct RocksDbThreadContext {
+    readopts: ReadOptions,
+    iters: [Option<DBIteratorWithThreadMode<'static, DB>>; CF_COUNT],
+}
+
+impl RocksDbThreadContext {
+    fn new() -> Self {
+        let mut readopts = ReadOptions::default();
+        readopts.start_pin();
+        Self {
+            readopts,
+            iters: array::from_fn(|_| None),
         }
     }
 
+    /// Run a callback with the cached `ReadOptions`.
     fn with_read_options<T>(&self, f: impl FnOnce(&ReadOptions) -> T) -> T {
-        match self.mode {
-            ReadOptionsMode::ThreadLocalScopePin => {
-                let _pin = ReadOptionsScopePinIfNotPinned::from(&self.readopts);
-                f(&self.readopts)
-            }
-            ReadOptionsMode::ThreadLocalLongPin => f(&self.readopts),
+        f(&self.readopts)
+    }
+
+    /// Get or create the cached iterator for the given column family.
+    fn iter_for_cf(&mut self, db: &DB, cf: ColumnFamily) -> &mut DBIteratorWithThreadMode<'static, DB> {
+        let idx = cf as usize;
+        if self.iters[idx].is_none() {
+            let cf_handle = db.cf_handle(cf.as_str())
+                .unwrap_or_else(|| panic!("missing RocksDB column family `{cf}` after open"));
+            let iter = db.iterator_cf(&cf_handle, IteratorMode::Start);
+            // SAFETY: the caller (`RocksDbBackend`) owns `Arc<DB>` and
+            // outlives this context, so the DB lives at least as long
+            // as any cached iterator.
+            let iter: DBIteratorWithThreadMode<'static, DB> = unsafe {
+                std::mem::transmute::<
+                    DBIteratorWithThreadMode<'_, DB>,
+                    DBIteratorWithThreadMode<'static, DB>,
+                >(iter)
+            };
+            self.iters[idx] = Some(iter);
         }
+        self.iters[idx].as_mut().unwrap()
     }
 }
 
-impl ReadOptionsMode {
-    const fn as_str(self) -> &'static str {
-        match self {
-            Self::ThreadLocalScopePin => "thread-local-scope-pin",
-            Self::ThreadLocalLongPin => "thread-local-long-pin",
-        }
-    }
-}
-
-impl Drop for ThreadReadOptions {
+impl Drop for RocksDbThreadContext {
     fn drop(&mut self) {
-        if self.mode == ReadOptionsMode::ThreadLocalLongPin {
-            self.readopts.finish_pin();
-        }
+        self.iters.iter_mut().for_each(|iter| *iter = None);
+        self.readopts.finish_pin();
     }
 }
 
-#[inline]
-fn cf_index(cf: ColumnFamily) -> usize {
-    match cf {
-        ColumnFamily::Meta => 0,
-        ColumnFamily::Checkpoint => 1,
-        ColumnFamily::TxByDigest => 2,
-        ColumnFamily::ObjectVersion => 3,
-        ColumnFamily::ObjectLastSeen => 4,
-        ColumnFamily::EventByType => 5,
-        ColumnFamily::OwnerTouchedObjects => 6,
-    }
-}
-
-fn configured_read_options_mode() -> ReadOptionsMode {
-    match std::env::var(READ_OPTIONS_MODE_ENV).as_deref() {
-        Ok("thread-local-long-pin" | "long-pin") => ReadOptionsMode::ThreadLocalLongPin,
-        _ => ReadOptionsMode::ThreadLocalScopePin,
-    }
-}
-
-#[allow(unsafe_code)]
-fn static_cf_handle(handle: Arc<BoundColumnFamily<'_>>) -> Arc<BoundColumnFamily<'static>> {
-    // SAFETY: `BoundColumnFamily<'a>` stores only a raw CF handle plus a
-    // PhantomData lifetime tying it to the DB. We cache the Arc to avoid the
-    // binding's per-read RwLock/map lookup, and `RocksDbBackend` declares
-    // `cf_handles` before `db` so these cached handles drop before the DB.
-    unsafe {
-        std::mem::transmute::<Arc<BoundColumnFamily<'_>>, Arc<BoundColumnFamily<'static>>>(handle)
+impl std::fmt::Debug for RocksDbThreadContext {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RocksDbThreadContext").finish()
     }
 }
 
@@ -235,12 +152,17 @@ impl StorageEngine for RocksDbBackend {
 
     fn get_pinned_with(
         &self,
+        ctx: &dyn ThreadContext,
         cf: ColumnFamily,
         key: &[u8],
         f: &mut dyn FnMut(Option<&[u8]>),
     ) -> Result<()> {
+        let rocks_ctx = ctx
+            .as_any_ref()
+            .downcast_ref::<RocksDbThreadContext>()
+            .expect("RocksDbBackend requires RocksDbThreadContext");
         let handle = self.cf_handle(cf);
-        self.with_read_options(|readopts| {
+        rocks_ctx.with_read_options(|readopts| {
             let pinned = self
                 .db
                 .get_pinned_cf_opt(handle, key, readopts)
@@ -252,12 +174,17 @@ impl StorageEngine for RocksDbBackend {
 
     fn multi_get_pinned_with(
         &self,
+        ctx: &dyn ThreadContext,
         cf: ColumnFamily,
         keys: &[&[u8]],
         f: &mut dyn FnMut(usize, Option<&[u8]>),
     ) -> Result<()> {
+        let rocks_ctx = ctx
+            .as_any_ref()
+            .downcast_ref::<RocksDbThreadContext>()
+            .expect("RocksDbBackend requires RocksDbThreadContext");
         let handle = self.cf_handle(cf);
-        self.with_read_options(|readopts| {
+        rocks_ctx.with_read_options(|readopts| {
             let results = self
                 .db
                 .batched_multi_get_cf_opt(handle, keys.iter(), false, readopts);
@@ -278,8 +205,8 @@ impl StorageEngine for RocksDbBackend {
         "cached-at-open"
     }
 
-    fn read_options_mode(&self) -> &'static str {
-        self.read_options_mode.as_str()
+    fn create_thread_context(&self) -> Box<dyn ThreadContext> {
+        Box::new(RocksDbThreadContext::new())
     }
 
     fn put(&self, cf: ColumnFamily, key: &[u8], value: &[u8]) -> Result<()> {
@@ -332,21 +259,24 @@ impl StorageEngine for RocksDbBackend {
 
     fn scan_prefix_count(
         &self,
+        ctx: &mut dyn ThreadContext,
         cf: ColumnFamily,
         prefix: &[u8],
         limit: usize,
     ) -> Result<ScanOutcome> {
-        let handle = self.cf_handle(cf);
-        let mut iter = self
-            .db
-            .iterator_cf(handle, IteratorMode::From(prefix, Direction::Forward));
+        let rocks_ctx = ctx
+            .as_any_mut()
+            .downcast_mut::<RocksDbThreadContext>()
+            .expect("RocksDbBackend requires RocksDbThreadContext");
+
+        let iter = rocks_ctx.iter_for_cf(&*self.db, cf);
+        iter.set_mode(IteratorMode::From(prefix, Direction::Forward));
 
         let mut outcome = ScanOutcome::default();
         while let Some(key) = iter.key() {
             if !key.starts_with(prefix) {
                 break;
             }
-
             outcome.rows += 1;
             outcome.key_bytes += key.len();
             if outcome.rows >= limit {
@@ -422,15 +352,17 @@ mod tests {
         db.put(ColumnFamily::Meta, b"a", b"alpha").expect("put a");
         db.put(ColumnFamily::Meta, b"b", b"beta").expect("put b");
 
+        let ctx = db.create_thread_context();
+
         let mut got_a: Option<Vec<u8>> = None;
-        db.get_pinned_with(ColumnFamily::Meta, b"a", &mut |slice| {
+        db.get_pinned_with(&*ctx, ColumnFamily::Meta, b"a", &mut |slice| {
             got_a = slice.map(|value| value.to_vec());
         })
         .expect("get_pinned_with a");
         assert_eq!(got_a.as_deref(), Some(b"alpha".as_slice()));
 
         let mut got_missing: Option<Vec<u8>> = Some(vec![]);
-        db.get_pinned_with(ColumnFamily::Meta, b"missing", &mut |slice| {
+        db.get_pinned_with(&*ctx, ColumnFamily::Meta, b"missing", &mut |slice| {
             got_missing = slice.map(|value| value.to_vec());
         })
         .expect("get_pinned_with missing");
@@ -438,7 +370,7 @@ mod tests {
 
         let keys: &[&[u8]] = &[b"a", b"missing", b"b"];
         let mut seen: Vec<(usize, Option<Vec<u8>>)> = Vec::new();
-        db.multi_get_pinned_with(ColumnFamily::Meta, keys, &mut |idx, slice| {
+        db.multi_get_pinned_with(&*ctx, ColumnFamily::Meta, keys, &mut |idx, slice| {
             seen.push((idx, slice.map(|value| value.to_vec())));
         })
         .expect("multi_get_pinned_with");

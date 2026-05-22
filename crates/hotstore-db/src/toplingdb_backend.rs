@@ -5,11 +5,10 @@ use anyhow::{bail, Context, Result};
 use hotstore_core::ColumnFamily;
 
 use crate::rocksdb_backend::RocksDbBackend;
-use crate::traits::{HotWriteBatch, StorageEngine};
+use crate::traits::{HotWriteBatch, StorageEngine, ThreadContext};
 
 pub const TOPLINGDB_EASY_MIGRATE_CONF_ENV: &str = "TOPLINGDB_EASY_MIGRATE_CONF";
 
-#[derive(Debug)]
 pub struct ToplingDbBackend {
     _path: PathBuf,
     _config_path: PathBuf,
@@ -62,20 +61,22 @@ impl StorageEngine for ToplingDbBackend {
 
     fn get_pinned_with(
         &self,
+        ctx: &dyn ThreadContext,
         cf: ColumnFamily,
         key: &[u8],
         f: &mut dyn FnMut(Option<&[u8]>),
     ) -> Result<()> {
-        self.inner.get_pinned_with(cf, key, f)
+        self.inner.get_pinned_with(ctx, cf, key, f)
     }
 
     fn multi_get_pinned_with(
         &self,
+        ctx: &dyn ThreadContext,
         cf: ColumnFamily,
         keys: &[&[u8]],
         f: &mut dyn FnMut(usize, Option<&[u8]>),
     ) -> Result<()> {
-        self.inner.multi_get_pinned_with(cf, keys, f)
+        self.inner.multi_get_pinned_with(ctx, cf, keys, f)
     }
 
     fn multi_get_impl(&self) -> &'static str {
@@ -86,8 +87,8 @@ impl StorageEngine for ToplingDbBackend {
         self.inner.cf_handle_mode()
     }
 
-    fn read_options_mode(&self) -> &'static str {
-        self.inner.read_options_mode()
+    fn create_thread_context(&self) -> Box<dyn ThreadContext> {
+        self.inner.create_thread_context()
     }
 
     fn put(&self, cf: ColumnFamily, key: &[u8], value: &[u8]) -> Result<()> {
@@ -109,11 +110,12 @@ impl StorageEngine for ToplingDbBackend {
 
     fn scan_prefix_count(
         &self,
+        ctx: &mut dyn ThreadContext,
         cf: ColumnFamily,
         prefix: &[u8],
         limit: usize,
     ) -> Result<crate::traits::ScanOutcome> {
-        self.inner.scan_prefix_count(cf, prefix, limit)
+        self.inner.scan_prefix_count(ctx, cf, prefix, limit)
     }
 
     fn compact_all(&self) -> Result<()> {

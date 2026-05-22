@@ -12,6 +12,7 @@ use hotstore_core::{
 };
 use hotstore_db::{
     open_backend, toplingdb_backend::TOPLINGDB_EASY_MIGRATE_CONF_ENV, BackendKind, StorageEngine,
+    ThreadContext,
 };
 use sha2::{Digest, Sha256};
 
@@ -298,7 +299,6 @@ pub fn run_benchmark_suite(config: BenchmarkConfig) -> Result<BenchmarkSuiteRepo
             total_memory_bytes: total_memory_bytes(),
             multi_get_impl: engine.multi_get_impl().to_owned(),
             cf_handle_mode: engine.cf_handle_mode().to_owned(),
-            read_options_mode: engine.read_options_mode().to_owned(),
             toplingdb_config: toplingdb_config_fingerprint(),
             checksum_report: config
                 .checksum_report_path
@@ -507,6 +507,7 @@ fn run_worker(
         records_returned_total: 0,
         bytes_returned_total: 0,
     };
+    let mut ctx = engine.create_thread_context();
     let mut rng = SimpleRng::new(seed);
 
     for i in 0..requests {
@@ -514,6 +515,7 @@ fn run_worker(
         let started_at = Instant::now();
         let op_result = execute_request(
             &*engine,
+            &mut *ctx,
             workload_data.as_ref(),
             workload,
             request_index,
@@ -559,10 +561,12 @@ fn run_warmup(
     access_pattern: AccessPattern,
     seed: u64,
 ) {
+    let mut ctx = engine.create_thread_context();
     let mut rng = SimpleRng::new(seed ^ 0x9e37_79b9_7f4a_7c15);
     for i in 0..requests {
         let _ = execute_request(
             &**engine,
+            &mut *ctx,
             workload_data,
             workload,
             start_index + i,
@@ -577,6 +581,7 @@ fn run_warmup(
 
 fn execute_request(
     engine: &dyn StorageEngine,
+    ctx: &mut dyn ThreadContext,
     workload_data: &WorkloadData,
     workload: WorkloadKind,
     request_index: usize,
@@ -590,28 +595,29 @@ fn execute_request(
         WorkloadKind::Noop => Ok(OperationOutcome::default()),
         WorkloadKind::GetTx => {
             let key = workload_data.key_at(request_index, access_pattern, rng)?;
-            point_get(engine, ColumnFamily::TxByDigest, key)
+            point_get(engine, ctx, ColumnFamily::TxByDigest, key)
         }
         WorkloadKind::GetObjectVersion => {
             let key = workload_data.key_at(request_index, access_pattern, rng)?;
-            point_get(engine, ColumnFamily::ObjectVersion, key)
+            point_get(engine, ctx, ColumnFamily::ObjectVersion, key)
         }
         WorkloadKind::GetObjectLastSeen => {
             let key = workload_data.key_at(request_index, access_pattern, rng)?;
-            point_get(engine, ColumnFamily::ObjectLastSeen, key)
+            point_get(engine, ctx, ColumnFamily::ObjectLastSeen, key)
         }
         WorkloadKind::MultiGetTx => {
             let keys = workload_data.batch_at(request_index, batch_size, access_pattern, rng)?;
-            multi_get(engine, ColumnFamily::TxByDigest, keys.as_slice())
+            multi_get(engine, ctx, ColumnFamily::TxByDigest, keys.as_slice())
         }
         WorkloadKind::MultiGetObjectVersion => {
             let keys = workload_data.batch_at(request_index, batch_size, access_pattern, rng)?;
-            multi_get(engine, ColumnFamily::ObjectVersion, keys.as_slice())
+            multi_get(engine, ctx, ColumnFamily::ObjectVersion, keys.as_slice())
         }
         WorkloadKind::ScanEvents => {
             let prefix = workload_data.prefix_at(request_index, access_pattern, rng)?;
             scan_prefix(
                 engine,
+                ctx,
                 ColumnFamily::EventByType,
                 prefix,
                 scan_limit,
@@ -620,6 +626,7 @@ fn execute_request(
         }
         WorkloadKind::MixedRpc => mixed_rpc(
             engine,
+            ctx,
             workload_data.mixed_request(
                 request_index,
                 batch_size,
@@ -632,10 +639,10 @@ fn execute_request(
     }
 }
 
-fn point_get(engine: &dyn StorageEngine, cf: ColumnFamily, key: &[u8]) -> Result<OperationOutcome> {
+fn point_get(engine: &dyn StorageEngine, ctx: &mut dyn ThreadContext, cf: ColumnFamily, key: &[u8]) -> Result<OperationOutcome> {
     let mut hit = false;
     let mut bytes_returned_total = 0u64;
-    engine.get_pinned_with(cf, key, &mut |value| {
+    engine.get_pinned_with(ctx, cf, key, &mut |value| {
         if let Some(value) = value {
             hit = true;
             bytes_returned_total = value.len() as u64;
@@ -652,13 +659,14 @@ fn point_get(engine: &dyn StorageEngine, cf: ColumnFamily, key: &[u8]) -> Result
 
 fn multi_get(
     engine: &dyn StorageEngine,
+    ctx: &mut dyn ThreadContext,
     cf: ColumnFamily,
     keys: &[&[u8]],
 ) -> Result<OperationOutcome> {
     let total = keys.len() as u64;
     let mut hits = 0u64;
     let mut bytes_returned_total = 0u64;
-    engine.multi_get_pinned_with(cf, keys, &mut |_idx, value| {
+    engine.multi_get_pinned_with(ctx, cf, keys, &mut |_idx, value| {
         if let Some(value) = value {
             hits += 1;
             bytes_returned_total += value.len() as u64;
@@ -674,6 +682,7 @@ fn multi_get(
 
 fn scan_prefix(
     engine: &dyn StorageEngine,
+    ctx: &mut dyn ThreadContext,
     cf: ColumnFamily,
     prefix: &[u8],
     limit: usize,
@@ -694,7 +703,7 @@ fn scan_prefix(
             })
         }
         ScanMode::Count => {
-            let outcome = engine.scan_prefix_count(cf, prefix, limit)?;
+            let outcome = engine.scan_prefix_count(ctx, cf, prefix, limit)?;
             Ok(OperationOutcome {
                 hits: u64::from(outcome.rows > 0),
                 misses: u64::from(outcome.rows == 0),
@@ -707,20 +716,21 @@ fn scan_prefix(
 
 fn mixed_rpc(
     engine: &dyn StorageEngine,
+    ctx: &mut dyn ThreadContext,
     request: MixedRequest<'_>,
     scan_mode: ScanMode,
 ) -> Result<OperationOutcome> {
     match request {
-        MixedRequest::GetTx(key) => point_get(engine, ColumnFamily::TxByDigest, key),
-        MixedRequest::GetObjectVersion(key) => point_get(engine, ColumnFamily::ObjectVersion, key),
+        MixedRequest::GetTx(key) => point_get(engine, ctx, ColumnFamily::TxByDigest, key),
+        MixedRequest::GetObjectVersion(key) => point_get(engine, ctx, ColumnFamily::ObjectVersion, key),
         MixedRequest::GetObjectLastSeen(key) => {
-            point_get(engine, ColumnFamily::ObjectLastSeen, key)
+            point_get(engine, ctx, ColumnFamily::ObjectLastSeen, key)
         }
         MixedRequest::MultiGetObjectVersion(keys) => {
-            multi_get(engine, ColumnFamily::ObjectVersion, keys.as_slice())
+            multi_get(engine, ctx, ColumnFamily::ObjectVersion, keys.as_slice())
         }
         MixedRequest::ScanEvents(prefix, limit) => {
-            scan_prefix(engine, ColumnFamily::EventByType, prefix, limit, scan_mode)
+            scan_prefix(engine, ctx, ColumnFamily::EventByType, prefix, limit, scan_mode)
         }
     }
 }
@@ -774,7 +784,6 @@ fn worker_seed(seed: u64, worker_idx: usize) -> u64 {
     seed ^ splitmix64(worker_idx as u64 + 0x517c_c1b7_2722_0a95)
 }
 
-#[derive(Debug, Clone)]
 struct SimpleRng {
     state: u64,
 }

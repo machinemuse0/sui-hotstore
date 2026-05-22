@@ -39,7 +39,6 @@ pub struct BenchmarkMetadata {
     pub total_memory_bytes: Option<u64>,
     pub multi_get_impl: String,
     pub cf_handle_mode: String,
-    pub read_options_mode: String,
     pub toplingdb_config: Option<FileFingerprint>,
     pub checksum_report: Option<FileFingerprint>,
     pub key_files: Vec<FileFingerprint>,

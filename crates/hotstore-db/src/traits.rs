@@ -1,3 +1,4 @@
+use std::any::Any;
 use std::fmt;
 use std::str::FromStr;
 
@@ -53,6 +54,26 @@ impl HotWriteBatch {
     }
 }
 
+/// Per-thread context object for storage engine operations.
+///
+/// Each thread creates one context and passes it through the call chain.
+/// Backend implementations downcast to their concrete type to access
+/// cached resources (e.g. per-DB ReadOptions, per-CF iterators).
+pub trait ThreadContext {
+    fn as_any_ref(&self) -> &dyn Any;
+    fn as_any_mut(&mut self) -> &mut dyn Any;
+}
+
+impl<T: 'static> ThreadContext for T {
+    fn as_any_ref(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
+}
+
 pub trait StorageEngine: Send + Sync + 'static {
     fn get(&self, cf: ColumnFamily, key: &[u8]) -> Result<Option<Vec<u8>>>;
 
@@ -65,6 +86,7 @@ pub trait StorageEngine: Send + Sync + 'static {
     /// copying a `Vec<u8>` for benchmark paths that only need value length.
     fn get_pinned_with(
         &self,
+        _ctx: &dyn ThreadContext,
         cf: ColumnFamily,
         key: &[u8],
         f: &mut dyn FnMut(Option<&[u8]>),
@@ -78,6 +100,7 @@ pub trait StorageEngine: Send + Sync + 'static {
     /// input key, in order, with the borrowed value or `None`.
     fn multi_get_pinned_with(
         &self,
+        _ctx: &dyn ThreadContext,
         cf: ColumnFamily,
         keys: &[&[u8]],
         f: &mut dyn FnMut(usize, Option<&[u8]>),
@@ -97,8 +120,13 @@ pub trait StorageEngine: Send + Sync + 'static {
         "backend-default"
     }
 
-    fn read_options_mode(&self) -> &'static str {
-        "backend-default"
+    /// Create a per-thread context object.
+    ///
+    /// Default implementation returns a no-op context. Backends that support
+    /// context-based caching (e.g. per-DB ReadOptions, per-CF iterators)
+    /// override this to return their concrete type.
+    fn create_thread_context(&self) -> Box<dyn ThreadContext> {
+        Box::new(())
     }
 
     fn put(&self, cf: ColumnFamily, key: &[u8], value: &[u8]) -> Result<()>;
@@ -114,6 +142,7 @@ pub trait StorageEngine: Send + Sync + 'static {
 
     fn scan_prefix_count(
         &self,
+        _ctx: &mut dyn ThreadContext,
         cf: ColumnFamily,
         prefix: &[u8],
         limit: usize,

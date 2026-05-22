@@ -1,5 +1,3 @@
-#![deny(unsafe_code)]
-
 pub mod cf;
 pub mod rocksdb_backend;
 pub mod toplingdb_backend;
@@ -7,7 +5,7 @@ pub mod traits;
 
 pub use rocksdb_backend::RocksDbBackend;
 pub use toplingdb_backend::ToplingDbBackend;
-pub use traits::{BackendKind, HotWriteBatch, StorageEngine, WriteOp};
+pub use traits::{BackendKind, HotWriteBatch, StorageEngine, ThreadContext, WriteOp};
 
 use std::path::Path;
 use std::sync::Arc;

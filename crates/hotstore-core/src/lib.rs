@@ -1,5 +1,3 @@
-#![forbid(unsafe_code)]
-
 pub mod key;
 pub mod record;
 pub mod schema;
