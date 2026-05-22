@@ -58,6 +58,37 @@ pub trait StorageEngine: Send + Sync + 'static {
 
     fn multi_get(&self, cf: ColumnFamily, keys: &[&[u8]]) -> Result<Vec<Option<Vec<u8>>>>;
 
+    /// Zero-copy variant of [`get`]. The callback receives a borrowed value
+    /// slice that is valid only for the duration of the call.
+    ///
+    /// Backends that can pin storage override this to avoid allocating and
+    /// copying a `Vec<u8>` for benchmark paths that only need value length.
+    fn get_pinned_with(
+        &self,
+        cf: ColumnFamily,
+        key: &[u8],
+        f: &mut dyn FnMut(Option<&[u8]>),
+    ) -> Result<()> {
+        let value = self.get(cf, key)?;
+        f(value.as_deref());
+        Ok(())
+    }
+
+    /// Zero-copy variant of [`multi_get`]. The callback is invoked once per
+    /// input key, in order, with the borrowed value or `None`.
+    fn multi_get_pinned_with(
+        &self,
+        cf: ColumnFamily,
+        keys: &[&[u8]],
+        f: &mut dyn FnMut(usize, Option<&[u8]>),
+    ) -> Result<()> {
+        let values = self.multi_get(cf, keys)?;
+        for (idx, value) in values.iter().enumerate() {
+            f(idx, value.as_deref());
+        }
+        Ok(())
+    }
+
     fn multi_get_impl(&self) -> &'static str {
         "unknown"
     }

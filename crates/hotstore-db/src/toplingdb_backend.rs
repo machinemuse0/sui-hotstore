@@ -60,6 +60,24 @@ impl StorageEngine for ToplingDbBackend {
         self.inner.multi_get(cf, keys)
     }
 
+    fn get_pinned_with(
+        &self,
+        cf: ColumnFamily,
+        key: &[u8],
+        f: &mut dyn FnMut(Option<&[u8]>),
+    ) -> Result<()> {
+        self.inner.get_pinned_with(cf, key, f)
+    }
+
+    fn multi_get_pinned_with(
+        &self,
+        cf: ColumnFamily,
+        keys: &[&[u8]],
+        f: &mut dyn FnMut(usize, Option<&[u8]>),
+    ) -> Result<()> {
+        self.inner.multi_get_pinned_with(cf, keys, f)
+    }
+
     fn multi_get_impl(&self) -> &'static str {
         self.inner.multi_get_impl()
     }

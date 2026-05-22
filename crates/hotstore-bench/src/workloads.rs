@@ -633,21 +633,20 @@ fn execute_request(
 }
 
 fn point_get(engine: &dyn StorageEngine, cf: ColumnFamily, key: &[u8]) -> Result<OperationOutcome> {
-    let value = engine.get(cf, key)?;
-    Ok(if value.is_some() {
-        OperationOutcome {
-            hits: 1,
-            misses: 0,
-            records_returned_total: 1,
-            bytes_returned_total: value.as_ref().map(|value| value.len()).unwrap_or(0) as u64,
+    let mut hit = false;
+    let mut bytes_returned_total = 0u64;
+    engine.get_pinned_with(cf, key, &mut |value| {
+        if let Some(value) = value {
+            hit = true;
+            bytes_returned_total = value.len() as u64;
         }
-    } else {
-        OperationOutcome {
-            hits: 0,
-            misses: 1,
-            records_returned_total: 0,
-            bytes_returned_total: 0,
-        }
+    })?;
+    let hits = u64::from(hit);
+    Ok(OperationOutcome {
+        hits,
+        misses: 1 - hits,
+        records_returned_total: hits,
+        bytes_returned_total,
     })
 }
 
@@ -656,17 +655,18 @@ fn multi_get(
     cf: ColumnFamily,
     keys: &[&[u8]],
 ) -> Result<OperationOutcome> {
-    let values = engine.multi_get(cf, keys)?;
-    let hits = values.iter().filter(|value| value.is_some()).count() as u64;
-    let misses = values.len() as u64 - hits;
-    let bytes_returned_total = values
-        .iter()
-        .filter_map(|value| value.as_ref())
-        .map(|value| value.len() as u64)
-        .sum();
+    let total = keys.len() as u64;
+    let mut hits = 0u64;
+    let mut bytes_returned_total = 0u64;
+    engine.multi_get_pinned_with(cf, keys, &mut |_idx, value| {
+        if let Some(value) = value {
+            hits += 1;
+            bytes_returned_total += value.len() as u64;
+        }
+    })?;
     Ok(OperationOutcome {
         hits,
-        misses,
+        misses: total - hits,
         records_returned_total: hits,
         bytes_returned_total,
     })

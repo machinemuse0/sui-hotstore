@@ -233,6 +233,43 @@ impl StorageEngine for RocksDbBackend {
         })
     }
 
+    fn get_pinned_with(
+        &self,
+        cf: ColumnFamily,
+        key: &[u8],
+        f: &mut dyn FnMut(Option<&[u8]>),
+    ) -> Result<()> {
+        let handle = self.cf_handle(cf);
+        self.with_read_options(|readopts| {
+            let pinned = self
+                .db
+                .get_pinned_cf_opt(handle, key, readopts)
+                .with_context(|| format!("RocksDB get failed for `{cf}`"))?;
+            f(pinned.as_ref().map(|slice| slice.as_ref()));
+            Ok(())
+        })
+    }
+
+    fn multi_get_pinned_with(
+        &self,
+        cf: ColumnFamily,
+        keys: &[&[u8]],
+        f: &mut dyn FnMut(usize, Option<&[u8]>),
+    ) -> Result<()> {
+        let handle = self.cf_handle(cf);
+        self.with_read_options(|readopts| {
+            let results = self
+                .db
+                .batched_multi_get_cf_opt(handle, keys.iter(), false, readopts);
+            for (idx, result) in results.into_iter().enumerate() {
+                let pinned =
+                    result.with_context(|| format!("RocksDB multi_get failed for `{cf}`"))?;
+                f(idx, pinned.as_ref().map(|slice| slice.as_ref()));
+            }
+            Ok(())
+        })
+    }
+
     fn multi_get_impl(&self) -> &'static str {
         "native_batched_multi_get_cf"
     }
@@ -377,5 +414,39 @@ mod tests {
         assert_eq!(scanned.len(), 2);
         assert_eq!(scanned[0].1, b"checkpoint-7".to_vec());
         assert_eq!(scanned[1].1, b"checkpoint-8".to_vec());
+    }
+
+    #[test]
+    fn rocksdb_backend_pinned_callbacks_return_borrowed_values() {
+        let temp_dir = TempDir::new().expect("temp dir");
+        let db = RocksDbBackend::open(temp_dir.path()).expect("open rocksdb");
+
+        db.put(ColumnFamily::Meta, b"a", b"alpha").expect("put a");
+        db.put(ColumnFamily::Meta, b"b", b"beta").expect("put b");
+
+        let mut got_a: Option<Vec<u8>> = None;
+        db.get_pinned_with(ColumnFamily::Meta, b"a", &mut |slice| {
+            got_a = slice.map(|value| value.to_vec());
+        })
+        .expect("get_pinned_with a");
+        assert_eq!(got_a.as_deref(), Some(b"alpha".as_slice()));
+
+        let mut got_missing: Option<Vec<u8>> = Some(vec![]);
+        db.get_pinned_with(ColumnFamily::Meta, b"missing", &mut |slice| {
+            got_missing = slice.map(|value| value.to_vec());
+        })
+        .expect("get_pinned_with missing");
+        assert!(got_missing.is_none());
+
+        let keys: &[&[u8]] = &[b"a", b"missing", b"b"];
+        let mut seen: Vec<(usize, Option<Vec<u8>>)> = Vec::new();
+        db.multi_get_pinned_with(ColumnFamily::Meta, keys, &mut |idx, slice| {
+            seen.push((idx, slice.map(|value| value.to_vec())));
+        })
+        .expect("multi_get_pinned_with");
+        assert_eq!(seen.len(), 3);
+        assert_eq!(seen[0], (0, Some(b"alpha".to_vec())));
+        assert_eq!(seen[1], (1, None));
+        assert_eq!(seen[2], (2, Some(b"beta".to_vec())));
     }
 }
