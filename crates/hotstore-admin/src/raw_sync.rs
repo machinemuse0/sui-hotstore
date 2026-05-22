@@ -511,7 +511,7 @@ fn update_row_digest(hasher: &mut Sha256, key: &[u8], value: &[u8]) {
 
 #[cfg(test)]
 mod tests {
-    use hotstore_db::{RocksDbBackend, StorageEngine};
+    use hotstore_db::{RocksDbBackend, StorageEngine, ThreadContext};
     use tempfile::TempDir;
 
     use super::*;
@@ -556,9 +556,10 @@ mod tests {
         assert_eq!(import_report.totals.sha256, export_report.totals.sha256);
 
         let target = RocksDbBackend::open(&target_path).expect("open target");
+        let ctx = target.create_thread_context();
         assert_eq!(
             target
-                .get(ColumnFamily::TxByDigest, b"tx-1")
+                .get(&*ctx, ColumnFamily::TxByDigest, b"tx-1")
                 .expect("get tx")
                 .as_deref(),
             Some(b"tx-payload".as_slice())

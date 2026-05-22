@@ -54,12 +54,6 @@ impl RocksDbBackend {
     fn cf_handle(&self, cf: ColumnFamily) -> &Arc<rocksdb::BoundColumnFamily<'static>> {
         &self.cf_handles[cf as usize]
     }
-
-    fn with_read_options<T>(&self, f: impl FnOnce(&ReadOptions) -> T) -> T {
-        let mut readopts = ReadOptions::default();
-        let _pin = readopts.scope_pin();
-        f(&readopts)
-    }
 }
 
 /// Per-thread context for RocksDB/ToplingDB operations.
@@ -126,18 +120,26 @@ impl std::fmt::Debug for RocksDbThreadContext {
 }
 
 impl StorageEngine for RocksDbBackend {
-    fn get(&self, cf: ColumnFamily, key: &[u8]) -> Result<Option<Vec<u8>>> {
+    fn get(&self, ctx: &dyn ThreadContext, cf: ColumnFamily, key: &[u8]) -> Result<Option<Vec<u8>>> {
+        let rocks_ctx = ctx
+            .as_any_ref()
+            .downcast_ref::<RocksDbThreadContext>()
+            .expect("RocksDbBackend requires RocksDbThreadContext");
         let handle = self.cf_handle(cf);
-        self.with_read_options(|readopts| {
+        rocks_ctx.with_read_options(|readopts| {
             self.db
                 .get_cf_opt(handle, key, readopts)
                 .with_context(|| format!("RocksDB get failed for `{cf}`"))
         })
     }
 
-    fn multi_get(&self, cf: ColumnFamily, keys: &[&[u8]]) -> Result<Vec<Option<Vec<u8>>>> {
+    fn multi_get(&self, ctx: &dyn ThreadContext, cf: ColumnFamily, keys: &[&[u8]]) -> Result<Vec<Option<Vec<u8>>>> {
+        let rocks_ctx = ctx
+            .as_any_ref()
+            .downcast_ref::<RocksDbThreadContext>()
+            .expect("RocksDbBackend requires RocksDbThreadContext");
         let handle = self.cf_handle(cf);
-        self.with_read_options(|readopts| {
+        rocks_ctx.with_read_options(|readopts| {
             self.db
                 .batched_multi_get_cf_opt(handle, keys.iter(), false, readopts)
                 .into_iter()
@@ -329,8 +331,10 @@ mod tests {
 
         db.write_batch(batch).expect("write batch");
 
+        let ctx = db.create_thread_context();
+
         assert_eq!(
-            db.get(ColumnFamily::Meta, b"dataset:name")
+            db.get(&*ctx, ColumnFamily::Meta, b"dataset:name")
                 .expect("meta get")
                 .as_deref(),
             Some(b"testnet-demo".as_slice())

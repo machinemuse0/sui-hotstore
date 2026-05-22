@@ -160,8 +160,9 @@ fn resolve_effective_first_checkpoint(
         return Ok(cli.first_checkpoint);
     }
 
+    let ctx = db.create_thread_context();
     let db_watermark = db
-        .get(ColumnFamily::Meta, META_WATERMARK_CHECKPOINT.as_bytes())?
+        .get(&*ctx, ColumnFamily::Meta, META_WATERMARK_CHECKPOINT.as_bytes())?
         .map(|bytes| String::from_utf8(bytes))
         .transpose()
         .context("failed to decode db watermark as utf-8")?

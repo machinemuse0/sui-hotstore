@@ -51,12 +51,12 @@ impl ToplingDbBackend {
 }
 
 impl StorageEngine for ToplingDbBackend {
-    fn get(&self, cf: ColumnFamily, key: &[u8]) -> Result<Option<Vec<u8>>> {
-        self.inner.get(cf, key)
+    fn get(&self, ctx: &dyn ThreadContext, cf: ColumnFamily, key: &[u8]) -> Result<Option<Vec<u8>>> {
+        self.inner.get(ctx, cf, key)
     }
 
-    fn multi_get(&self, cf: ColumnFamily, keys: &[&[u8]]) -> Result<Vec<Option<Vec<u8>>>> {
-        self.inner.multi_get(cf, keys)
+    fn multi_get(&self, ctx: &dyn ThreadContext, cf: ColumnFamily, keys: &[&[u8]]) -> Result<Vec<Option<Vec<u8>>>> {
+        self.inner.multi_get(ctx, cf, keys)
     }
 
     fn get_pinned_with(

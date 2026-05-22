@@ -75,9 +75,9 @@ impl<T: 'static> ThreadContext for T {
 }
 
 pub trait StorageEngine: Send + Sync + 'static {
-    fn get(&self, cf: ColumnFamily, key: &[u8]) -> Result<Option<Vec<u8>>>;
+    fn get(&self, ctx: &dyn ThreadContext, cf: ColumnFamily, key: &[u8]) -> Result<Option<Vec<u8>>>;
 
-    fn multi_get(&self, cf: ColumnFamily, keys: &[&[u8]]) -> Result<Vec<Option<Vec<u8>>>>;
+    fn multi_get(&self, ctx: &dyn ThreadContext, cf: ColumnFamily, keys: &[&[u8]]) -> Result<Vec<Option<Vec<u8>>>>;
 
     /// Zero-copy variant of [`get`]. The callback receives a borrowed value
     /// slice that is valid only for the duration of the call.
@@ -86,12 +86,12 @@ pub trait StorageEngine: Send + Sync + 'static {
     /// copying a `Vec<u8>` for benchmark paths that only need value length.
     fn get_pinned_with(
         &self,
-        _ctx: &dyn ThreadContext,
+        ctx: &dyn ThreadContext,
         cf: ColumnFamily,
         key: &[u8],
         f: &mut dyn FnMut(Option<&[u8]>),
     ) -> Result<()> {
-        let value = self.get(cf, key)?;
+        let value = self.get(ctx, cf, key)?;
         f(value.as_deref());
         Ok(())
     }
@@ -100,12 +100,12 @@ pub trait StorageEngine: Send + Sync + 'static {
     /// input key, in order, with the borrowed value or `None`.
     fn multi_get_pinned_with(
         &self,
-        _ctx: &dyn ThreadContext,
+        ctx: &dyn ThreadContext,
         cf: ColumnFamily,
         keys: &[&[u8]],
         f: &mut dyn FnMut(usize, Option<&[u8]>),
     ) -> Result<()> {
-        let values = self.multi_get(cf, keys)?;
+        let values = self.multi_get(ctx, cf, keys)?;
         for (idx, value) in values.iter().enumerate() {
             f(idx, value.as_deref());
         }
