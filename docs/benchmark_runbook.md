@@ -597,14 +597,11 @@ bash scripts/gen-bench-keys-from-sui-db.sh \
 默认读路径优化：
 
 - CF handles 在 DB open 时缓存，避免每次按 CF 名称走带锁查找。
-- `ReadOptions` 按 backend/thread 缓存，默认模式是 `thread-local-scope-pin`。
-- 如果要测试长作用域 pin，可以在 benchmark 前设置：
+- `ReadOptions` 每线程一个，`Iterator` 每线程每 CF 一个。
 
-```bash
-export HOTSTORE_READ_OPTIONS_MODE=thread-local-long-pin
-```
+ToplingDB 实现了 ZeroCopy，只需要调用 `ReadOptions` 的 `start_pin()` 和 `finish_pin()`，期间 get_pinned_cf_opt/batched_multi_get_cf_opt 等使用 DBPinnableSlice 的方法就是 ZeroCopy 的。其它返回 `Vec<u8>` 的方法无法享受 ZeroCopy 优化。
 
-这个模式会让每个 backend/thread 的 `ReadOptions` 在首次使用时 `start_pin()`，线程退出或 backend 在当前线程 drop 时 `finish_pin()`。为避免 backend 早于其它线程的 TLS 清理而销毁 DB，long-pin 的 TLS 条目会持有一份 DB 引用；因此它不会对已销毁的 DB 调 `finish_pin()`，但可能把 DB 生命周期延长到触碰过该 backend 的 worker 线程退出。建议先只用于 read-only benchmark，不要直接推广到会反复 open/drop backend 的长期服务进程。
+ToplingDB 的 Iterator 实现了 value() 懒加载，如果不使用 value() 就不加载，避免了浪费。
 
 ```bash
 scripts/run-benchmark-suite.sh \
